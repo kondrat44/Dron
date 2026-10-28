@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Специальности — КузТАГиС</title>
+<meta name="theme-color" content="#0071e3">
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body data-page="spec">
+<main>
+<section class="page-hero">
+  <div class="wrap">
+    <p class="eyebrow rv">Обучение</p>
+    <h1 class="words">Специальности и профессии.</h1>
+    <p class="lead rv d2">14 программ среднего профессионального образования. Нажми на карточку, чтобы узнать подробности.</p>
+  </div>
+</section>
+<section style="padding-top:10px">
+  <div class="wrap">
+    <div class="toolbar">
+      <div class="seg" id="segType"><button data-v="all" class="on">Все</button><button data-v="spec">Специалисты</button><button data-v="work">Рабочие</button></div>
+      <label class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q" type="search" placeholder="Поиск: дрон, дизайн, 08.02.01…"></label>
+    </div>
+    <div class="seg scroll" id="segGroup" style="margin-bottom:24px">
+      <button data-v="all" class="on">Все направления</button><button data-v="arch">Архитектура и дизайн</button><button data-v="geo">Геодезия и БАС</button><button data-v="build">Строительство</button><button data-v="weld">Сварка</button>
+    </div>
+    <div class="spec-grid" id="list"></div>
+    <div class="empty" id="empty"><div style="font-size:44px">🔍</div><p>Ничего не найдено. Попробуй другой запрос.</p></div>
+  </div>
+</section>
+<section class="alt">
+  <div class="wrap">
+    <div class="cards two">
+      <div class="card rv"><div class="ic">🎯</div><h3>Специалист среднего звена</h3><p>Техник, архитектор, дизайнер, геодезист. Углублённая теория и проектная работа, можно продолжить учёбу в вузе.</p></div>
+      <div class="card rv d1"><div class="ic">🔧</div><h3>Квалифицированный рабочий</h3><p>Мастер своего дела: сварщик, отделочник, графический дизайнер. Больше практики и быстрый выход на работу.</p></div>
+    </div>
+  </div>
+</section>
+</main>
+<script src="assets/data.js"></script>
+<script src="assets/app.js"></script>
+<script src="assets/specs.js"></script>
+<script>
+const list=document.getElementById('list'),empty=document.getElementById('empty'),q=document.getElementById('q');
+renderSpecs(list,SPECS);
+let fType='all',fGroup='all';
+function apply(){
+  const s=q.value.trim().toLowerCase();let n=0;
+  list.querySelectorAll('.spec').forEach(c=>{
+    const ok=(fType==='all'||c.dataset.type===fType)&&(fGroup==='all'||c.dataset.group===fGroup)&&(!s||c.dataset.q.includes(s));
+    c.classList.toggle('hide',!ok);if(ok)n++;
+  });
+  empty.style.display=n?'none':'block';
+}
+const segG=document.getElementById('segGroup');
+const h=location.hash.slice(1);
+if(h&&segG.querySelector(`[data-v="${h}"]`)){segG.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.v===h));fGroup=h}
+initSeg(document.getElementById('segType'),v=>{fType=v;apply()});
+initSeg(segG,v=>{fGroup=v;apply()});
+q.addEventListener('input',apply);apply();
+</script>
+</body>
+</html>

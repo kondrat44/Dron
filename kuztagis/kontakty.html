@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Контакты — КузТАГиС</title>
+<meta name="theme-color" content="#0071e3">
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body data-page="cont">
+<main>
+<section class="page-hero">
+  <div class="wrap">
+    <p class="eyebrow rv">Контакты</p>
+    <h1 class="words">Мы на связи.</h1>
+    <p class="lead rv d2">Звоните, пишите или приходите — будем рады помочь.</p>
+  </div>
+</section>
+<section style="padding-top:10px">
+  <div class="wrap">
+    <div class="contact-grid">
+      <div>
+        <div class="card rv" style="margin-bottom:18px">
+          <p class="muted">Приёмная</p><a class="big-tel" href="tel:+73842381783">+7 (3842) 38-17-83</a>
+          <p class="muted" style="margin-top:18px">Приёмная комиссия</p><a class="big-tel" href="tel:+73842381735">+7 (3842) 38-17-35</a>
+          <p class="muted" style="margin-top:18px">Электронная почта</p><a class="big-tel accent" href="mailto:kuztagis@mail.ru">kuztagis@mail.ru</a>
+          <p class="muted" style="margin-top:18px">Режим работы: Пн–Пт 8:30–17:00, перерыв 12:00–12:30</p>
+        </div>
+        <div class="list rv d1" id="places">
+          <button class="row" style="width:100%;text-align:left" data-ll="55.3268,86.0886" data-q="Кемерово, улица Радищева, 5"><div class="ic">🏢</div><div class="t"><b>Главный корпус</b><span>ул. Радищева, 5</span></div><span class="arrow">›</span></button>
+          <button class="row" style="width:100%;text-align:left" data-ll="55.3229,86.0870" data-q="Кемерово, Космическая улица, 21"><div class="ic">🏫</div><div class="t"><b>Корпус № 2</b><span>ул. Космическая, 21</span></div><span class="arrow">›</span></button>
+          <button class="row" style="width:100%;text-align:left" data-ll="55.3213,86.0835" data-q="Кемерово, Космическая улица, 8"><div class="ic">🏫</div><div class="t"><b>Корпус № 3</b><span>ул. Космическая, 8</span></div><span class="arrow">›</span></button>
+          <button class="row" style="width:100%;text-align:left" data-ll="55.3272,86.0900" data-q="Кемерово, улица Радищева, 3а"><div class="ic">🛏️</div><div class="t"><b>Общежитие</b><span>ул. Радищева, 3а</span></div><span class="arrow">›</span></button>
+        </div>
+      </div>
+      <div class="map zoom"><iframe id="map" title="Карта" loading="lazy" src="https://yandex.ru/map-widget/v1/?text=Кемерово%2C%20улица%20Радищева%2C%205&z=16"></iframe></div>
+    </div>
+    <p class="center rv" style="margin-top:22px"><a class="link" id="route" href="https://yandex.ru/maps/?text=Кемерово%2C%20улица%20Радищева%2C%205" target="_blank" rel="noopener">Построить маршрут в Яндекс Картах</a></p>
+  </div>
+</section>
+</main>
+<script src="assets/app.js"></script>
+<script>
+document.querySelectorAll('#places .row').forEach(r=>r.onclick=()=>{
+  const q=encodeURIComponent(r.dataset.q);
+  document.getElementById('map').src='https://yandex.ru/map-widget/v1/?text='+q+'&z=16';
+  document.getElementById('route').href='https://yandex.ru/maps/?text='+q;
+  document.querySelectorAll('#places .row').forEach(x=>x.style.background='');r.style.background='var(--accent-soft)';
+  if(innerWidth<980)document.getElementById('map').scrollIntoView({behavior:'smooth',block:'center'});
+});
+</script>
+</body>
+</html>
