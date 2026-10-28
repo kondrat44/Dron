@@ -15,7 +15,7 @@
   --haze: #6e6e73;
   --line: rgba(29, 29, 31, .1);
   --card: rgba(255, 255, 255, .82);
-  --signal: #0071e3;
+  --signal: #1d1d1f;
   --paper: #ffffff;
   --sky-top: #6f8da6;
   --sky-low: #c9d6dc;
@@ -38,12 +38,12 @@ nav .wrap { display: flex; align-items: center; justify-content: space-between; 
 .logo { font-family: var(--f-display); font-weight: 600; letter-spacing: -.01em; font-size: 19px; }
 .navr { display: flex; align-items: center; gap: 8px; }
 .btn { font: 500 14px/1 var(--f-body); letter-spacing: -.01em; color: var(--paper); background: var(--signal); border: 0; border-radius: 980px; padding: 9px 16px; cursor: pointer; text-decoration: none; display: inline-block; }
-.btn.ghost { background: rgba(255, 255, 255, .7); color: var(--signal); box-shadow: inset 0 0 0 1px rgba(0, 113, 227, .35); }
+.btn.ghost { background: rgba(255, 255, 255, .8); color: var(--steel); box-shadow: inset 0 0 0 1px rgba(29, 29, 31, .25); }
 .btn:focus-visible, a:focus-visible, .tag:focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; }
 
 .metal { max-width: 100%; overflow-wrap: anywhere; font-family: var(--f-display); font-weight: 700; line-height: 1.02; letter-spacing: -.035em;
   background: linear-gradient(180deg, #1d1d1f 0%, #3a3a3e 55%, #6e6e73 100%); -webkit-background-clip: text; background-clip: text; color: transparent; text-wrap: balance; }
-.eyebrow { font: 600 15px/1.3 var(--f-body); letter-spacing: -.01em; color: var(--signal); }
+.eyebrow { font: 600 15px/1.3 var(--f-body); letter-spacing: -.01em; color: var(--haze); }
 .lede { max-width: 38ch; color: var(--haze); font-size: 17px; margin: 0; }
 section { position: relative; }
 .stick { position: sticky; top: 0; height: 100vh; height: 100svh; overflow: hidden; }
@@ -76,7 +76,7 @@ section { position: relative; }
 .prog b { color: var(--steel); font-weight: 500; }
 .card { grid-row: 3; width: min(100%, 380px); background: var(--card); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
   border: 1px solid var(--line); border-radius: 18px; padding: 18px 20px; display: grid; gap: 8px; box-shadow: 0 12px 40px rgba(0, 0, 0, .07); }
-.card .num { font: 600 13px/1 var(--f-body); color: var(--signal); font-variant-numeric: tabular-nums; }
+.card .num { font: 600 13px/1 var(--f-body); color: var(--haze); font-variant-numeric: tabular-nums; }
 .card h3 { margin: 0; font: 700 21px/1.2 var(--f-display); letter-spacing: -.02em; }
 .card p { margin: 0; color: #424245; font-size: 15px; line-height: 1.47; }
 .card .spec { font: 500 13px/1.45 var(--f-body); color: var(--haze); border-top: 1px solid var(--line); padding-top: 8px; }
