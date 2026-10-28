@@ -24,7 +24,8 @@
   --f-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
   color-scheme: light;
 }
-html { background: var(--ink); }
+html { background: var(--ink); scroll-snap-type: y proximity; }
+.snap { position: absolute; left: 0; width: 1px; height: 1px; scroll-snap-align: start; pointer-events: none; }
 body { background: var(--ink); color: var(--steel); font-family: var(--f-body); font-size: 17px; line-height: 1.47; letter-spacing: -.01em; overflow-x: hidden; -webkit-font-smoothing: antialiased; }
 ::selection { background: var(--signal); color: var(--paper); }
 #sky { position: fixed; inset: 0; z-index: 0; opacity: 0; pointer-events: none; background: linear-gradient(180deg, var(--sky-top) 0%, #9fb3c1 45%, var(--sky-low) 70%, #b9c7c9 100%); }
@@ -57,7 +58,7 @@ section { position: relative; }
 .scrollhint i { width: 1px; height: 34px; background: linear-gradient(var(--steel), transparent); animation: drip 1.8s ease-in-out infinite; transform-origin: top; }
 @keyframes drip { 0% { transform: scaleY(0) } 50% { transform: scaleY(1) } 100% { transform: scaleY(1); opacity: 0 } }
 
-#feel { height: 170vh; }
+#feel { height: 150vh; }
 #feel .shot { place-content: center; text-align: center; justify-items: center; gap: 18px; }
 #feel h2 { font-size: clamp(40px, 9vw, 150px); margin: 0; filter: drop-shadow(0 0 18px rgba(255, 255, 255, .95)) drop-shadow(0 0 4px rgba(255, 255, 255, .9)); }
 #feel .split, #feel .eyebrow { background: rgba(255, 255, 255, .75); padding: 6px 12px; border-radius: 3px; }
@@ -67,8 +68,8 @@ section { position: relative; }
 .split small { font-family: var(--f-body); font-size: 13px; color: var(--haze); }
 
 /* tours */
-#explode { height: 700vh; }
-#remote { height: 640vh; }
+#explode { height: 620vh; }
+#remote { height: 620vh; }
 .tour .shot { grid-template-rows: auto 1fr auto; gap: 16px; }
 .tour h2 { font-size: clamp(34px, 4.6vw, 72px); margin: 0; }
 .tourhead { display: grid; gap: 8px; justify-items: start; justify-self: start; background: var(--card); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid var(--line); border-radius: 18px; padding: 14px 18px; }
@@ -104,7 +105,7 @@ section { position: relative; }
 .tag.on .dot { background: var(--signal); box-shadow: 0 0 0 4px rgba(42, 99, 212, .2), 0 0 14px rgba(42, 99, 212, .6); }
 .tag.on .lb { border-color: rgba(42, 99, 212, .55); color: var(--steel); }
 
-#specs { height: 190vh; }
+#specs { height: 160vh; }
 #specs .shot { align-content: end; gap: 26px; }
 #specs h2 { font-size: clamp(40px, 6vw, 96px); max-width: 7em; margin: 0; }
 .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--line); }
@@ -114,7 +115,7 @@ section { position: relative; }
 .grid b small { font: 500 15px/1 var(--f-body); color: var(--haze); margin-left: 4px; letter-spacing: 0; }
 .grid span { font: 400 14px/1.4 var(--f-body); color: var(--haze); }
 
-#flight { height: 300vh; }
+#flight { height: 240vh; }
 #flight .shot { place-content: start center; text-align: center; justify-items: center; padding-top: 13vh; gap: 14px; }
 #flight h2 { font: 700 clamp(34px, 5.5vw, 80px)/1.04 var(--f-display); letter-spacing: -.035em; color: #fff; margin: 0; text-shadow: 0 2px 30px rgba(20, 35, 50, .35); }
 #flight .eyebrow { color: #fff; opacity: .9; }
@@ -642,6 +643,20 @@ document.querySelectorAll('[data-jump]').forEach(a => a.addEventListener('click'
   scrollTo({ top: el.offsetTop + (a.dataset.jump === 'hero' ? 0 : innerHeight * .2), behavior: reduce ? 'auto' : 'smooth' });
 }));
 
+/* ---------- snap points ---------- */
+function placeSnaps() {
+  document.querySelectorAll('.snap').forEach(s => s.remove());
+  const vh = innerHeight;
+  const put = (sec, frac) => { const el = document.getElementById(sec); const h = el.offsetHeight - (el.querySelector('.stick') ? vh : 0); const d = document.createElement('div'); d.className = 'snap'; d.style.top = Math.round(h * frac) + 'px'; el.appendChild(d); };
+  put('hero', 0); put('feel', .5); put('specs', .5); put('flight', .55); put('end', .98);
+  for (const id of ['explode', 'remote']) {
+    const n = id === 'explode' ? 10 : 10;
+    for (let i = 0; i < n; i++) put(id, STEP0 + (i + .5) / n * STEPS);
+  }
+}
+placeSnaps();
+let snapT; addEventListener('resize', () => { clearTimeout(snapT); snapT = setTimeout(placeSnaps, 200); });
+
 /* ---------- timeline ---------- */
 const IDS = ['hero', 'feel', 'explode', 'specs', 'flight', 'remote', 'end'];
 const sections = IDS.map(id => document.getElementById(id));
@@ -717,7 +732,7 @@ function anchorWorld(tour, p, out) {
 }
 function frame() {
   const dt = Math.min(clock.getDelta(), .05), time = clock.elapsedTime;
-  T = timeline(); Ts += (T - Ts) * (reduce ? 1 : 1 - Math.pow(.0015, dt));
+  T = timeline(); Ts += (T - Ts) * (reduce ? 1 : 1 - Math.pow(.006, dt));
   const s = sample(Ts); texts(Ts);
   const narrow = camera.aspect < .8, idle = reduce ? 0 : 1, flight = s.sky, rcv = s.rc;
 
@@ -767,7 +782,7 @@ function frame() {
     if (narrow) lk.y -= dist * .22; else lk.addScaledVector(right, dist * .22);
     wantPos.lerp(cp, tw); wantLook.lerp(lk, tw);
   }
-  const k = reduce || !camInit ? 1 : 1 - Math.exp(-dt * 3.2);
+  const k = reduce || !camInit ? 1 : 1 - Math.exp(-dt * 2.6);
   camPos.lerp(wantPos, k); camLook.lerp(wantLook, k); camInit = true;
   camera.position.copy(camPos);
   camera.lookAt(camLook);
