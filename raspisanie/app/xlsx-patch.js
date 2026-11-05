@@ -233,6 +233,15 @@ window.XlsxPatch = (() => {
         .map((m) => ({ r1: m.r1 - r, c1: m.c1 - c, r2: m.r2 - r, c2: m.c2 - c }));
       return { cells, merges, h, w };
     }
+    /* только значения: рамки, шрифт и объединения остаются — клетка выглядит как пустая пара */
+    clearValues(r, c, h, w) {
+      for (let i = 0; i < h; i++)
+        for (let j = 0; j < w; j++) {
+          const x = this.cell(r + i, c + j, false);
+          if (x) this.clearValue(x);
+        }
+      this.dirty = true;
+    }
     clearRect(r, c, h, w) {
       for (let i = 0; i < h; i++)
         for (let j = 0; j < w; j++) {

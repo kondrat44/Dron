@@ -103,7 +103,8 @@ window.Export = (() => {
         b.period !== l.period ||
         b.subgroup !== l.subgroup ||
         b.groups.join("|") !== l.groups.join("|");
-      const edited = fields.some((k) => (b[k] || "") !== (l[k] || ""));
+      const edited =
+        fields.some((k) => (b[k] || "") !== (l[k] || "")) || !!l.cancelled !== !!b.cancelled;
       let to = moved ? target(l) : home(b);
       if (!to) {
         warnings.push(`«${label(l)}»: у группы в файле нет такой пары — занятие останется на прежнем месте`);
@@ -127,7 +128,7 @@ window.Export = (() => {
     const occupants = new Map([...touched.keys()].map((k) => [k, []]));
     for (const l of state.lessons) {
       const t = place.get(l.id);
-      if (t && occupants.has(keyOf(t))) occupants.get(keyOf(t)).push(l);
+      if (t && !l.cancelled && occupants.has(keyOf(t))) occupants.get(keyOf(t)).push(l);
     }
     const pieces = new Map();
     for (const list of occupants.values())
@@ -160,7 +161,7 @@ window.Export = (() => {
       layoutOf.set(k, list.filter((l) => !dropped.has(l.id)));
     }
     for (const { l, b, to } of plan)
-      if (!dropped.has(l.id) && to.h === 1 && b.period !== null && (l.teacher || ""))
+      if (!l.cancelled && !dropped.has(l.id) && to.h === 1 && b.period !== null && (l.teacher || ""))
         warnings.push(`«${label(l)}» стоит на месте «Разговора о важном»: строки для преподавателя там нет, фамилия ${l.teacher} в файл не запишется`);
     if (warnings.length && confirm && !(await confirm(warnings))) return null;
     for (const [k, slot] of touched) {
@@ -183,6 +184,14 @@ window.Export = (() => {
     /* текст правок: дисциплина, преподаватель, кабинет на новом месте */
     for (const { l, b, to } of plan) {
       if (dropped.has(l.id)) continue;
+      if (l.cancelled) {
+        /* «окно»: стираем текст пары, оформление клетки остаётся */
+        if (!touched.has(keyOf(to))) {
+          const sh = shape(b);
+          (await book.sheet(to.sheet)).clearValues(to.r, to.base + sh.dc, to.h, sh.w);
+        }
+        continue;
+      }
       const sheet = await book.sheet(to.sheet),
         sh = shape(b),
         col = to.base + sh.dc;

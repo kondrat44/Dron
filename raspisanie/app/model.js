@@ -146,7 +146,8 @@ window.Model = (() => {
     } catch {}
     /* Учебная практика проходит в техникуме, остальная (производственная и т.п.) — вне его. */
     const away = (s) => !!practice && practice.test(s) && !(inside && inside.test(s));
-    lessons = lessons.filter((l) => !l.groups.some((g) => ignored.has(low(g))));
+    /* отменённые пары («окно») ни с чем не пересекаются */
+    lessons = lessons.filter((l) => !l.cancelled && !l.groups.some((g) => ignored.has(low(g))));
     const intervals = new Map(
       lessons.map((l) => {
         const t = times(l, settings);

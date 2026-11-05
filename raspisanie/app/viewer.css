@@ -367,3 +367,7 @@ td.warn-t{color:#b25000;font-weight:600}
 .fix-box .chips{display:flex;flex-wrap:wrap;gap:6px}
 .fix-box .chip{cursor:pointer}
 .tag.note{background:#eef4ff;color:#1d4ed8;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.les.off{opacity:.62;background:repeating-linear-gradient(135deg,#f5f5f7 0 8px,#ececf0 8px 16px)}
+.les.off .s{color:#6e6e73}
+.tag.off{background:#ececf0;color:#3a3a3c}
+.btn.danger{color:#c62828}

@@ -11,7 +11,7 @@ window.Tools = (() => {
 
   /* ---------- 1–2. Проверка файла и сравнение с прошлой неделей ---------- */
   function summary(st) {
-    const mine = st.lessons.filter((l) => Model.inScope(l, st.settings));
+    const mine = st.lessons.filter((l) => !l.cancelled && Model.inScope(l, st.settings));
     const map = {};
     for (const l of mine) map[slotKey(l)] = val(l);
     return {
@@ -132,7 +132,7 @@ window.Tools = (() => {
   /* ---------- 3. Замена преподавателя ---------- */
   function busy(st, teacher, l) {
     return st.lessons.some(
-      (x) => x !== l && people(x.teacher) === people(teacher) && Model.overlaps(x, l, st.settings),
+      (x) => x !== l && !x.cancelled && people(x.teacher) === people(teacher) && Model.overlaps(x, l, st.settings),
     );
   }
   function candidates(st, l) {
@@ -174,14 +174,17 @@ window.Tools = (() => {
             base.get(x.id).period === l.period,
         )
       : null;
-    for (const x of [l, partner].filter(Boolean)) Object.assign(x, Model.copy(base.get(x.id)));
+    for (const x of [l, partner].filter(Boolean)) {
+      delete x.cancelled;
+      Object.assign(x, Model.copy(base.get(x.id)));
+    }
   }
 
   /* ---------- 8. Нагрузка преподавателей ---------- */
   function load(st, teachers) {
     const out = [];
     for (const t of teachers) {
-      const ls = st.lessons.filter((l) => people(l.teacher) === people(t) && l.period !== null);
+      const ls = st.lessons.filter((l) => !l.cancelled && people(l.teacher) === people(t) && l.period !== null);
       const slots = new Map();
       for (const l of ls) slots.set(l.date + "|" + l.period, l);
       let windows = 0;
@@ -217,7 +220,7 @@ window.Tools = (() => {
       (r) => r && !shared.has(people(r)),
     );
     return rooms
-      .filter((r) => !st.lessons.some((x) => x.id !== probe.id && x.room === r && Model.overlaps(x, probe, st.settings)))
+      .filter((r) => !st.lessons.some((x) => x.id !== probe.id && !x.cancelled && x.room === r && Model.overlaps(x, probe, st.settings)))
       .sort(
         (a, b) =>
           Number(Model.building(b, st.settings) === prefer) - Number(Model.building(a, st.settings) === prefer) ||
@@ -234,7 +237,7 @@ window.Tools = (() => {
       for (const period of periodsFor(st, date, l.groups[0])) {
         if (date === l.date && period === l.period) continue;
         const probe = { ...l, date, period, start: "", end: "" };
-        const others = st.lessons.filter((x) => x.id !== l.id && Model.overlaps(x, probe, st.settings));
+        const others = st.lessons.filter((x) => x.id !== l.id && !x.cancelled && Model.overlaps(x, probe, st.settings));
         if (others.some((x) => sameGroup(x, l))) continue;
         if (l.teacher && others.some((x) => people(x.teacher) === people(l.teacher))) continue;
         const roomBusy = !!l.room && !shared.has(people(l.room)) && others.some((x) => x.room === l.room);
