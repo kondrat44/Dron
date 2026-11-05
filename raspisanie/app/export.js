@@ -78,61 +78,57 @@ window.Export = (() => {
   }
   const label = (l) =>
     `${l.groups.join(", ")}, ${new Date(l.date + "T12:00:00").toLocaleDateString("ru", { weekday: "short", day: "2-digit", month: "2-digit" })}, ${l.period ? l.period + " пара" : "до первой пары"}: ${l.subject}`;
-  async function original(state, bytes, name) {
+  /* confirm(warnings) -> Promise<boolean>: спросить пользователя, если правки нельзя перенести один в один. */
+  async function original(state, bytes, name, confirm, extra = []) {
     const wb = XlsxCompat.workbook(bytes);
     const { layout } = Reader.matrix(wb, name);
     const base = new Map(state.baseline.map((b) => [b.id, b]));
     const book = await XlsxPatch.open(bytes);
-    const problems = [];
+    const warnings = [...extra];
     const target = (l) => {
       const slot = layout[l.date + "|" + l.groups[0]];
-      const r = slot?.rows[l.period === null ? "before" : String(l.period)];
-      return slot && r ? { sheet: slot.sheet, r, base: slot.base } : null;
+      const before = l.period === null;
+      const r = slot?.rows[before ? "before" : String(l.period)];
+      return slot && r ? { sheet: slot.sheet, r, base: slot.base, h: before ? 1 : 2 } : null;
     };
+    const home = (b) => ({ ...origin(b), h: b.period === null ? 1 : 2 });
+    /* где занятие окажется в файле: новое место или, если его нет, прежнее */
+    const place = new Map();
     const plan = [];
     for (const l of state.lessons) {
       const b = base.get(l.id);
-      if (!b?.source?.sheet || !b.source.cell) {
-        problems.push("нет места в исходном файле — " + label(l));
-        continue;
-      }
+      if (!b?.source?.sheet || !b.source.cell) continue;
       const moved =
         b.date !== l.date ||
         b.period !== l.period ||
         b.subgroup !== l.subgroup ||
         b.groups.join("|") !== l.groups.join("|");
       const edited = fields.some((k) => (b[k] || "") !== (l[k] || ""));
-      if ((b.period === null) !== (l.period === null)) {
-        problems.push("занятие до первой пары нельзя ставить на обычную пару — " + label(l));
-        continue;
-      }
-      if (!moved && !edited) continue;
-      const to = target(l);
+      let to = moved ? target(l) : home(b);
       if (!to) {
-        problems.push("в файле нет такой клетки (день или пара отсутствует) — " + label(l));
-        continue;
+        warnings.push(`«${label(l)}»: у группы в файле нет такой пары — занятие останется на прежнем месте`);
+        to = home(b);
       }
-      plan.push({ l, b, from: origin(b), to, moved });
+      place.set(l.id, to);
+      if (moved || edited) plan.push({ l, b, to, moved: keyOf(to) !== keyOf(home(b)) });
     }
-    if (problems.length)
-      throw Error("Не удалось перенести в исходный вид: " + problems.slice(0, 5).join("; "));
     if (!plan.length) {
       save(new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), name);
       return 0;
     }
-    /* slots whose layout changes are rebuilt from pieces of the original */
+    /* клетки, где меняется расклад, собираются заново из кусков исходного файла */
     const touched = new Map();
     for (const p of plan)
       if (p.moved) {
-        touched.set(keyOf(p.from), p.from);
+        const h = home(p.b);
+        touched.set(keyOf(h), h);
         touched.set(keyOf(p.to), p.to);
       }
     const occupants = new Map([...touched.keys()].map((k) => [k, []]));
-    if (touched.size)
-      for (const l of state.lessons) {
-        const t = target(l);
-        if (t && occupants.has(keyOf(t))) occupants.get(keyOf(t)).push(l);
-      }
+    for (const l of state.lessons) {
+      const t = place.get(l.id);
+      if (t && occupants.has(keyOf(t))) occupants.get(keyOf(t)).push(l);
+    }
     const pieces = new Map();
     for (const list of occupants.values())
       for (const l of list) {
@@ -142,42 +138,60 @@ window.Export = (() => {
           sheet = await book.sheet(o.sheet);
         pieces.set(l.id, sheet.capture(o.r, o.base + sh.dc, sh.h, sh.w));
       }
+    const dropped = new Set();
+    const layoutOf = new Map();
     for (const [k, slot] of touched) {
-      const list = occupants.get(k);
+      /* переехавшие сюда занятия важнее тех, что стояли раньше */
+      const list = occupants
+        .get(k)
+        .sort((a, b) => Number(keyOf(home(base.get(b.id))) !== k) - Number(keyOf(home(base.get(a.id))) !== k));
       const cols = new Map();
       for (const l of list) {
-        const sh = shape(l);
-        for (let j = sh.dc; j < sh.dc + sh.w; j++) {
-          if (cols.has(j))
-            throw Error(
-              "В одной клетке оказались два занятия: " + label(l) + " и " + label(cols.get(j)) + ". Разведите их по разным парам или подгруппам.",
-            );
-          cols.set(j, l);
+        const sh = shape(base.get(l.id));
+        const span = [...Array(sh.w).keys()].map((j) => sh.dc + j);
+        const busy = span.map((j) => cols.get(j)).find(Boolean);
+        if (busy) {
+          dropped.add(l.id);
+          warnings.push(`В одной клетке оказались «${label(busy)}» и «${label(l)}». В файл запишется только первое, второе пропадёт из файла`);
+          continue;
         }
+        span.forEach((j) => cols.set(j, l));
       }
+      layoutOf.set(k, list.filter((l) => !dropped.has(l.id)));
+    }
+    for (const { l, b, to } of plan)
+      if (!dropped.has(l.id) && to.h === 1 && b.period !== null && (l.teacher || ""))
+        warnings.push(`«${label(l)}» стоит на месте «Разговора о важном»: строки для преподавателя там нет, фамилия ${l.teacher} в файл не запишется`);
+    if (warnings.length && confirm && !(await confirm(warnings))) return null;
+    for (const [k, slot] of touched) {
       const sheet = await book.sheet(slot.sheet);
-      const hasBefore = list.some((l) => l.period === null);
-      sheet.clearRect(slot.r, slot.base, hasBefore ? 1 : 2, 6);
-      for (const l of list) {
-        const sh = shape(l),
-          piece = pieces.get(l.id),
-          bShape = shape(base.get(l.id));
-        if (bShape.w !== sh.w)
-          throw Error("Нельзя превратить занятие подгруппы в занятие всей группы: " + label(l));
-        sheet.paste(piece, slot.r, slot.base + sh.dc);
+      sheet.clearRect(slot.r, slot.base, slot.h, 6);
+      for (const l of layoutOf.get(k)) {
+        const sh = shape(base.get(l.id)),
+          piece = pieces.get(l.id);
+        const clipped = {
+          ...piece,
+          cells: piece.cells.filter((c) => c.i < slot.h),
+          merges: piece.merges
+            .filter((m) => m.r1 < slot.h)
+            .map((m) => ({ ...m, r2: Math.min(m.r2, slot.h - 1) }))
+            .filter((m) => m.r1 !== m.r2 || m.c1 !== m.c2),
+        };
+        sheet.paste(clipped, slot.r, slot.base + sh.dc);
       }
     }
-    /* text edits: subject, teacher, room in their (new) place */
+    /* текст правок: дисциплина, преподаватель, кабинет на новом месте */
     for (const { l, b, to } of plan) {
+      if (dropped.has(l.id)) continue;
       const sheet = await book.sheet(to.sheet),
-        sh = shape(l),
+        sh = shape(b),
         col = to.base + sh.dc;
       if ((b.subject || "") !== (l.subject || "")) sheet.setValue(to.r, col, l.subject);
-      if (l.period !== null && (b.teacher || "") !== (l.teacher || ""))
-        sheet.setValue(to.r + 1, col, l.teacher);
+      if (to.h === 2 && (b.teacher || "") !== (l.teacher || "")) sheet.setValue(to.r + 1, col, l.teacher);
       if ((b.room || "") !== (l.room || "")) {
         let rc = col + 1;
-        if (sh.w === 6) rc = !sheet.hasValue(to.r, to.base + 4) && sheet.hasValue(to.r, to.base + 5) ? to.base + 5 : to.base + 4;
+        if (sh.w === 6)
+          rc = !sheet.hasValue(to.r, to.base + 4) && sheet.hasValue(to.r, to.base + 5) ? to.base + 5 : to.base + 4;
         sheet.setValue(to.r, rc, l.room);
       }
     }

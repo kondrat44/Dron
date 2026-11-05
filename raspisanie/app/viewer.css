@@ -342,3 +342,11 @@ details.card[open]>summary{margin-bottom:10px}
   .tbl td:first-child{font-weight:600}
   .tbl input.specialty{min-width:0}
 }
+.confirm-overlay{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.32);display:flex;align-items:center;justify-content:center;padding:16px;animation:fadein .2s ease}
+.confirm-card{background:#fff;color:#1d1d1f;border-radius:20px;max-width:620px;width:100%;max-height:86vh;overflow:auto;padding:22px 22px 18px;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+.confirm-card h3{margin:0 0 6px;font-size:1.2rem}
+.confirm-card ul{margin:10px 0 16px;padding-left:20px;font-size:.92rem;line-height:1.45}
+.confirm-card li{margin:4px 0}
+.confirm-card .actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.confirm-overlay{animation:none}}

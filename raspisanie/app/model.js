@@ -200,8 +200,6 @@ window.Model = (() => {
     const x = ls.find((l) => l.id === a),
       y = ls.find((l) => l.id === b);
     if (!x || !y || x === y) throw Error("Выберите две разные пары");
-    if ((x.period === null) !== (y.period === null))
-      throw Error("Занятие до первой пары можно менять только с таким же занятием");
     for (const k of ["date", "period", "start", "end"]) {
       const v = x[k];
       x[k] = y[k];

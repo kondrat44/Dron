@@ -301,6 +301,40 @@ function myIssues() {
   );
   return (state.issues || []).filter((x) => cells.has(x.where));
 }
+/* Конфликты, которых не было в исходном файле, а появились после правок. */
+function newConflicts() {
+  const key = (c) => c.types.join("+") + "|" + [...c.ids].sort().join("|");
+  const inside = new Set(state.lessons.filter(scope).map((l) => l.id));
+  const before = new Set(Model.conflicts(state.baseline, state.settings).map(key));
+  const byId = new Map(state.lessons.map((l) => [l.id, l]));
+  return Model.conflicts(state.lessons, state.settings)
+    .filter((c) => c.ids.some((id) => inside.has(id)) && !before.has(key(c)))
+    .map((c) => {
+      const [a, b] = c.ids.map((id) => byId.get(id));
+      const what = c.types.map((t) => t.toLowerCase()).join(" и ");
+      return `Конфликт (${what}): ${dm(a.date)}, ${pairName(a.period)} — ${a.groups.join(", ")} «${a.subject}» (${a.teacher || "без преподавателя"}, ауд. ${a.room || "?"}) и ${b.groups.join(", ")} «${b.subject}» (${b.teacher || "без преподавателя"}, ауд. ${b.room || "?"})`;
+    });
+}
+/* Окно «Вы уверены?» со списком того, что не так. */
+function askConfirm(items) {
+  return new Promise((resolve) => {
+    const box = document.createElement("div");
+    box.className = "confirm-overlay";
+    box.innerHTML = `<div class="confirm-card" role="dialog" aria-modal="true"><h3>Вы уверены, что хотите скачать?</h3><p class="hint">После правок в расписании есть ${items.length} ${plural(items.length, "проблема", "проблемы", "проблем")}. Скачать можно, но проверьте:</p><ul>${items
+      .slice(0, 12)
+      .map((x) => `<li>${esc(x)}</li>`)
+      .join("")}${items.length > 12 ? `<li>…и ещё ${items.length - 12}</li>` : ""}</ul><div class="actions"><button class="btn" id="confirm-no">Вернуться и исправить</button><button class="btn blue" id="confirm-yes">Скачать всё равно</button></div></div>`;
+    document.body.appendChild(box);
+    const done = (v) => {
+      box.remove();
+      resolve(v);
+    };
+    box.querySelector("#confirm-yes").onclick = () => done(true);
+    box.querySelector("#confirm-no").onclick = () => done(false);
+    box.onclick = (e) => e.target === box && done(false);
+    box.querySelector("#confirm-no").focus();
+  });
+}
 function welcome() {
   visible = [];
   const changed = saved
@@ -671,7 +705,7 @@ function settings() {
 }
 function help() {
   $("main").innerHTML =
-    `<section class="view"><h2 class="ttl">Как пользоваться</h2><div class="card"><ol class="steps"><li><b>Загрузите файл.</b> Нажмите «Загрузить файл» и выберите Excel недели (.xlsx), который выдаёт программа учебной части. Программа сама найдёт группы ${esc(scopeName())}.</li><li><b>Найдите нужное.</b> Начните вводить группу, фамилию или кабинет в строку поиска и нажмите подсказку. Можно выбрать группу, преподавателя, кабинет, корпус или день в списках. «Сбросить фильтры» — снова всё расписание.</li><li><b>Поправьте пару.</b> Нажмите на пару, чтобы сменить преподавателя или кабинет. Чтобы поменять две пары местами, нажмите «Обменять с другой парой», затем вторую пару, или просто перетащите одну пару на другую.</li><li><b>Следите за красным.</b> Красным выделены конфликты: группа, преподаватель или кабинет в двух местах одновременно. Ошибочную правку отмените кнопкой «Отменить».</li><li><b>Скачайте Excel.</b> Кнопка «Excel» скачивает тот же файл, что вы загрузили: те же листы и оформление, изменены только поправленные пары. В имени файла будет «(изменено)».</li><li><b>Печать.</b> Выберите группу, преподавателя или кабинет и нажмите «Печать / PDF». В окне печати выберите А4 или «Сохранить как PDF».</li></ol><p class="hint">Файл никуда не отправляется: всё работает в браузере на этом компьютере. Если вкладку закрыли, при следующем открытии нажмите «Продолжить». Галочка «Работа со всеми отделениями» — бета-тестирование для остальных отделений.</p></div></section>`;
+    `<section class="view"><h2 class="ttl">Как пользоваться</h2><div class="card"><ol class="steps"><li><b>Загрузите файл.</b> Нажмите «Загрузить файл» и выберите Excel недели (.xlsx), который выдаёт программа учебной части. Программа сама найдёт группы ${esc(scopeName())}.</li><li><b>Найдите нужное.</b> Начните вводить группу, фамилию или кабинет в строку поиска и нажмите подсказку. Можно выбрать группу, преподавателя, кабинет, корпус или день в списках. «Сбросить фильтры» — снова всё расписание.</li><li><b>Поправьте пару.</b> Нажмите на пару, чтобы сменить преподавателя или кабинет. Чтобы поменять две пары местами, нажмите «Обменять с другой парой», затем вторую пару, или просто перетащите одну пару на другую.</li><li><b>Следите за красным.</b> Красным выделены конфликты: группа, преподаватель или кабинет в двух местах одновременно. Ошибочную правку отмените кнопкой «Отменить».</li><li><b>Скачайте Excel.</b> Кнопка «Excel» скачивает тот же файл, что вы загрузили: те же листы и оформление, изменены только поправленные пары. В имени файла будет «(изменено)». Если после правок есть конфликты или что-то не помещается в файл, программа покажет список и спросит «Вы уверены?» — скачать можно всё равно.</li><li><b>Печать.</b> Выберите группу, преподавателя или кабинет и нажмите «Печать / PDF». В окне печати выберите А4 или «Сохранить как PDF».</li></ol><p class="hint">Файл никуда не отправляется: всё работает в браузере на этом компьютере. Если вкладку закрыли, при следующем открытии нажмите «Продолжить». Галочка «Работа со всеми отделениями» — бета-тестирование для остальных отделений.</p></div></section>`;
 }
 $("import").onclick = () => $("file").click();
 $("file").onchange = async (e) => {
@@ -729,7 +763,8 @@ $("export").onclick = async () => {
       bytes = await askOriginal();
       if (!bytes) return;
     }
-    const n = await Export.original(state, bytes, state.source);
+    const n = await Export.original(state, bytes, state.source, askConfirm, newConflicts());
+    if (n === null) return notify("Скачивание отменено, правки на месте");
     notify(
       n
         ? `Excel сохранён в исходном виде. Изменённых пар: ${n}`
