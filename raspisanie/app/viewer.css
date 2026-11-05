@@ -376,3 +376,6 @@ td.warn-t{color:#b25000;font-weight:600}
 .brand-text{display:flex;flex-direction:column}
 @media (max-width:640px){.logo .brand{width:36px;height:36px}}
 @media print{.logo .brand{width:36px;height:36px}}
+.steps li>div{min-width:0;line-height:1.5;padding-top:3px}
+.help-notes{margin:6px 0 0 18px;padding:0;line-height:1.55;font-size:.92rem;color:var(--ink2)}
+.help-notes li{margin:4px 0}
