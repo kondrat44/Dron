@@ -371,3 +371,8 @@ td.warn-t{color:#b25000;font-weight:600}
 .les.off .s{color:#6e6e73}
 .tag.off{background:#ececf0;color:#3a3a3c}
 .btn.danger{color:#c62828}
+.logo{display:flex;flex-direction:row;align-items:center;gap:10px}
+.logo .brand{width:44px;height:44px;flex:none}
+.brand-text{display:flex;flex-direction:column}
+@media (max-width:640px){.logo .brand{width:36px;height:36px}}
+@media print{.logo .brand{width:36px;height:36px}}
