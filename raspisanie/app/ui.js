@@ -59,28 +59,79 @@ const toB64 = (u8) => {
   return btoa(s);
 };
 const fromB64 = (b) => Uint8Array.from(atob(b), (c) => c.charCodeAt(0));
-function originals() {
+/* Исходный файл: в памяти на время работы и в IndexedDB браузера (там много места),
+   чтобы «Excel» всегда выдавал тот же файл, а не таблицу. */
+let current = null;
+const idb = (mode, fn) =>
+  new Promise((res, rej) => {
+    let req;
+    try {
+      req = indexedDB.open("kuztagis-viewer", 1);
+    } catch (e) {
+      return rej(e);
+    }
+    req.onupgradeneeded = () => req.result.createObjectStore("files");
+    req.onerror = () => rej(req.error);
+    req.onsuccess = () => {
+      const tx = req.result.transaction("files", mode),
+        r = fn(tx.objectStore("files"));
+      tx.oncomplete = () => res(r?.result);
+      tx.onerror = () => rej(tx.error);
+    };
+  });
+async function keepOriginal(name, u8) {
+  current = { name, bytes: u8 };
   try {
-    return JSON.parse(localStorage.getItem(ORIG_KEY)) || {};
-  } catch {
-    return {};
-  }
-}
-function keepOriginal(name, u8) {
-  const all = originals();
-  delete all[name];
-  all[name] = toB64(u8);
-  const names = Object.keys(all);
-  while (names.length > 1) delete all[names.shift()];
+    localStorage.removeItem(ORIG_KEY);
+  } catch {}
   try {
-    localStorage.setItem(ORIG_KEY, JSON.stringify(all));
-  } catch {
-    notify("Исходный файл не поместился в память браузера: Excel будет выгружен таблицей.");
-  }
+    await idb("readwrite", (st) => st.put({ name, bytes: u8 }, "original"));
+  } catch {}
 }
-function originalFor(name) {
-  const b = originals()[name];
-  return b ? fromB64(b) : null;
+async function originalFor(name) {
+  if (current?.name === name) return current.bytes;
+  try {
+    const rec = await idb("readonly", (st) => st.get("original"));
+    if (rec?.name === name) {
+      current = { name, bytes: new Uint8Array(rec.bytes) };
+      return current.bytes;
+    }
+  } catch {}
+  try {
+    const old = JSON.parse(localStorage.getItem(ORIG_KEY) || "{}")[name];
+    if (old) return (current = { name, bytes: fromB64(old) }).bytes;
+  } catch {}
+  return null;
+}
+/* Если исходника нет (другой компьютер, очищен браузер) — просим выбрать его, а не выдаём другой файл. */
+function askOriginal() {
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".xlsx";
+    input.onchange = async () => {
+      const f = input.files[0];
+      if (!f) return resolve(null);
+      try {
+        const u8 = new Uint8Array(await f.arrayBuffer());
+        const data = Reader.matrix(XlsxCompat.workbook(u8), f.name);
+        const ids = new Set(data.lessons.map((l) => l.id));
+        const same =
+          data.lessons.length === state.baseline.length &&
+          state.baseline.every((b) => ids.has(b.id));
+        if (!same) {
+          notify("Это другой файл. Выберите тот же файл, который загружали: «" + state.source + "».");
+          return resolve(null);
+        }
+        await keepOriginal(state.source, u8);
+        resolve(u8);
+      } catch {
+        notify("Не удалось прочитать файл. Выберите исходный .xlsx «" + state.source + "».");
+        resolve(null);
+      }
+    };
+    input.click();
+  });
 }
 let visible = [],
   analysis = [];
@@ -418,7 +469,7 @@ function editor(id) {
   ui.editId = id;
   const old = state.baseline.find((x) => x.id === id);
   $("sheet").innerHTML =
-    `<h3>${esc(l.subject)}</h3><p>${esc(l.groups.join(", "))} · ${esc(new Date(l.date + "T12:00:00").toLocaleDateString("ru", { weekday: "long" }) + ", " + dm(l.date))} · ${pairName(l.period)} ${l.subgroup ? "· " + l.subgroup + " подгр." : ""}</p><label class="field">Преподаватель<input class="inp" id="edit-teacher" list="teachers" value="${esc(l.teacher)}"></label><datalist id="teachers">${list(
+    `<h3>${esc(l.subject)}</h3><p>${esc(l.groups.join(", "))} · ${esc(new Date(l.date + "T12:00:00").toLocaleDateString("ru", { weekday: "long" }) + ", " + dm(l.date))} · ${pairName(l.period)} ${l.subgroup ? "· " + l.subgroup + " подгр." : ""}</p><label class="field" ${l.period === null ? "hidden" : ""}>Преподаватель<input class="inp" id="edit-teacher" list="teachers" value="${esc(l.teacher)}"></label><datalist id="teachers">${list(
       "teacher",
     )
       .map((t) => `<option value="${esc(t)}">`)
@@ -466,7 +517,7 @@ function editor(id) {
     render();
   };
   $("edit-close").onclick = close;
-  $("edit-teacher").focus();
+  if (l.period !== null) $("edit-teacher").focus();
 }
 function refs() {
   const groups = list("group");
@@ -630,7 +681,7 @@ $("file").onchange = async (e) => {
   try {
     const data = await Reader.read(file);
     if (/\.xlsx$/i.test(file.name) && data.layout)
-      keepOriginal(file.name, new Uint8Array(await file.arrayBuffer()));
+      await keepOriginal(file.name, new Uint8Array(await file.arrayBuffer()));
     if (!data.lessons.length)
       throw Error("Не найдено занятий. Проверьте формат и дату листов.");
     commit(() => {
@@ -668,18 +719,22 @@ $("undo").onclick = undo;
 $("export").onclick = async () => {
   if (!state.lessons.length) return notify("Сначала загрузите расписание");
   try {
-    const bytes = originalFor(state.source);
-    if (bytes) {
-      const n = await Export.original(state, bytes, state.source);
-      notify(
-        n
-          ? `Excel сохранён в исходном виде. Изменённых пар: ${n}`
-          : "Excel сохранён: правок нет, файл совпадает с исходным",
-      );
-    } else {
+    if (!/\.xlsx$/i.test(state.source || "")) {
       await Export.table(state.lessons.filter(matches), state);
-      notify("Исходного файла нет (загружен CSV или таблица) — сохранена таблица");
+      return notify("Расписание загружено не из Excel-матрицы — сохранена таблица");
     }
+    let bytes = await originalFor(state.source);
+    if (!bytes) {
+      notify("Выберите исходный файл «" + state.source + "»: правки запишутся прямо в него");
+      bytes = await askOriginal();
+      if (!bytes) return;
+    }
+    const n = await Export.original(state, bytes, state.source);
+    notify(
+      n
+        ? `Excel сохранён в исходном виде. Изменённых пар: ${n}`
+        : "Excel сохранён: правок нет, файл совпадает с исходным",
+    );
   } catch (e) {
     notify("Ошибка экспорта: " + e.message);
   }
