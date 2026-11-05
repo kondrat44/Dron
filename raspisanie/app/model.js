@@ -58,15 +58,21 @@ window.Model = (() => {
     "Дорожное отделение",
     "Заочное отделение",
   ];
+  /* Справочник кабинетов из приказа о заведовании (data/rooms.js). */
+  const roomInfo = (room) =>
+    (window.ROOMS || []).find((r) => r.room === String(room || "").trim()) || null;
+  const allRooms = () => (window.ROOMS || []).map((r) => r.room);
   function building(room, settings) {
     try {
       return (
         String(room).match(new RegExp(settings.roomPattern))?.[
           settings.roomGroup
-        ] || ""
+        ] ||
+        roomInfo(room)?.building ||
+        ""
       );
     } catch {
-      return "";
+      return roomInfo(room)?.building || "";
     }
   }
   /* Специальности Дорожного отделения по окончанию шифра группы. */
@@ -103,7 +109,7 @@ window.Model = (() => {
       settings: copy(defaults),
       departments: copy(departments),
       catalog: fillCatalog({}, [...new Set(lessons.flatMap((l) => l.groups))], defaults),
-      rooms: [...new Set(lessons.map((l) => l.room).filter(Boolean))],
+      rooms: [...new Set([...allRooms(), ...lessons.map((l) => l.room)].filter(Boolean))],
     };
   }
   const minutes = (t) => {
@@ -210,6 +216,8 @@ window.Model = (() => {
     copy,
     defaults,
     withDefaults,
+    roomInfo,
+    allRooms,
     inScope,
     fillCatalog,
     departments,

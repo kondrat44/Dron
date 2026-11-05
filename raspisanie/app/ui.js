@@ -26,6 +26,9 @@ if (saved) {
   state.catalog = saved.catalog;
   state.rooms = saved.rooms;
 }
+/* Полный список кабинетов техникума всегда под рукой. */
+for (const s of [state, saved])
+  if (s) s.rooms = [...new Set([...Model.allRooms(), ...(s.rooms || [])])];
 /* Каждый запуск — только своё отделение; все отделения включаются галочкой вручную. */
 for (const s of [state, saved]) if (s?.settings) s.settings.allDepartments = false;
 if (saved)
@@ -449,8 +452,11 @@ function schedule() {
           (l) => l.room === r && Model.overlaps(l, probe, state.settings),
         ),
     );
-    $("free-result").textContent =
-      rooms.join(", ") || "Свободных известных кабинетов нет";
+    $("free-result").innerHTML = rooms.length
+      ? rooms
+          .map((r) => `<b>${esc(r)}</b>${Model.roomInfo(r) ? " — " + esc(Model.roomInfo(r).name) : ""}`)
+          .join("<br>")
+      : "Свободных кабинетов нет";
   };
 }
 function suggestions() {
@@ -509,10 +515,12 @@ function editor(id) {
       .map((t) => `<option value="${esc(t)}">`)
       .join(
         "",
-      )}</datalist><label class="field">Кабинет<input class="inp" id="edit-room" list="rooms" value="${esc(l.room)}"></label><datalist id="rooms">${list(
-      "room",
-    )
-      .map((t) => `<option value="${esc(t)}">`)
+      )}</datalist><label class="field">Кабинет<input class="inp" id="edit-room" list="rooms" value="${esc(l.room)}"></label><p class="hint" id="room-info"></p><datalist id="rooms">${[
+      ...new Set([...state.rooms, ...list("room")]),
+    ]
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b, "ru", { numeric: true }))
+      .map((t) => `<option value="${esc(t)}">${esc(Model.roomInfo(t)?.name || "")}</option>`)
       .join(
         "",
       )}</datalist><p class="hint">Было в файле: ${esc(old?.teacher || "преподаватель не указан")}, ауд. ${esc(old?.room || "не указана")}, ${esc(dm(old?.date))}, ${esc(pairName(old?.period))}</p><p id="edit-conflicts" role="status"></p><div class="actions"><button class="btn blue" id="edit-save">Сохранить</button><button class="btn" id="edit-swap">Обменять с другой парой</button><button class="btn" id="edit-close">Закрыть</button></div>`;
@@ -526,6 +534,25 @@ function editor(id) {
     const conflicts = Model.conflicts(ls, state.settings).filter((x) =>
       x.ids.includes(id),
     );
+    const r = target.room,
+      info = Model.roomInfo(r),
+      busy = r
+        ? state.lessons.filter(
+            (x) => x.id !== id && x.room === r && Model.overlaps(x, target, state.settings),
+          )
+        : [];
+    $("room-info").textContent = r
+      ? [
+          info ? info.name : "кабинета нет в списке техникума",
+          Model.building(r, state.settings) ? "корпус " + Model.building(r, state.settings) : "",
+          info?.owner ? "заведует " + info.owner : "",
+          busy.length
+            ? "в это время занят: " + [...new Set(busy.flatMap((x) => x.groups))].join(", ")
+            : "в это время свободен",
+        ]
+          .filter(Boolean)
+          .join(" · ")
+      : "";
     $("edit-conflicts").textContent = conflicts.length
       ? "Конфликты: " +
         [...new Set(conflicts.flatMap((x) => x.types))].join(", ") +
