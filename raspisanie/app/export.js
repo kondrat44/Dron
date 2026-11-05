@@ -4,7 +4,10 @@ window.Export = (() => {
       a = document.createElement("a");
     a.href = url;
     a.download = name;
+    a.style.display = "none";
+    document.body.appendChild(a);
     a.click();
+    a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 30000);
   }
   async function table(lessons, state) {
