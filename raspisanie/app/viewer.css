@@ -335,12 +335,13 @@ details.card[open]>summary{margin-bottom:10px}
 .bells .filter textarea{width:100%;min-height:150px}
 .tbl input.specialty{width:100%;min-width:220px}
 @media (max-width:640px){
-  .tbl table,.tbl tbody,.tbl tr,.tbl td{display:block;width:100%}
-  .tbl thead{display:none}
-  .tbl tr{padding:10px 0;border-bottom:1px solid var(--line,#e5e5ea)}
-  .tbl td{padding:3px 0}
-  .tbl td:first-child{font-weight:600}
-  .tbl input.specialty{min-width:0}
+  .tbl.catalog table,.tbl.catalog tbody,.tbl.catalog tr,.tbl.catalog td{display:block;width:100%}
+  .tbl.catalog thead{display:none}
+  .tbl.catalog tr{padding:10px 0;border-bottom:1px solid var(--line,#e5e5ea)}
+  .tbl.catalog td{padding:3px 0}
+  .tbl.catalog td:first-child{font-weight:600}
+  .tbl.catalog input.specialty{min-width:0}
+  .tbl{overflow-x:auto}
 }
 .confirm-overlay{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.32);display:flex;align-items:center;justify-content:center;padding:16px;animation:fadein .2s ease}
 .confirm-card{background:#fff;color:#1d1d1f;border-radius:20px;max-width:620px;width:100%;max-height:86vh;overflow:auto;padding:22px 22px 18px;box-shadow:0 20px 60px rgba(0,0,0,.25)}
@@ -350,3 +351,15 @@ details.card[open]>summary{margin-bottom:10px}
 .confirm-card .actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end}
 @keyframes fadein{from{opacity:0}to{opacity:1}}
 @media (prefers-reduced-motion:reduce){.confirm-overlay{animation:none}}
+.notice.warn{background:#fff4e5;border:1px solid #ffd8a8}
+.notice.warn ul{margin:6px 0 0 18px}
+.pill.warn{background:#fff2e0;color:#b25000}
+ul.diff,ul.changes{margin:4px 0 12px 18px;font-size:.92rem;line-height:1.5}
+ul.changes li{margin:6px 0}
+.btn.small{padding:4px 10px;font-size:.85rem;margin-left:6px}
+.sub-row{border-top:1px solid var(--line,#e5e5ea);padding:10px 0}
+.sub-pick{display:flex;gap:8px;flex-wrap:wrap}
+.sub-pick select{flex:1;min-width:200px}
+.room-grid td.busy{background:#fdecec;font-weight:600}
+.room-grid td.free{color:#2e7d32}
+td.warn-t{color:#b25000;font-weight:600}

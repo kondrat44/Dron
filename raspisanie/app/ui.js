@@ -279,6 +279,7 @@ function render() {
   if (ui.tab === "refs") refs();
   if (ui.tab === "settings") settings();
   if (ui.tab === "help") help();
+  if (ui.tab === "tools") tools();
   document.querySelectorAll(".les.bad").forEach((el, i) => {
     if (i < 20 && !oldBad.has(el.dataset.lesson))
       Motion.play(el, [
@@ -365,13 +366,13 @@ function schedule() {
     dates = ui.filters.date ? [ui.filters.date] : allDates;
   const summary = `${esc(scopeName())} · ${list("group").length} групп · ${list("teacher").length} преподавателей · ${list("room").length} кабинетов · ${state.lessons.filter(scope).length} занятий (включая подгруппы)`;
   $("main").innerHTML =
-    `<section class="view"><div class="notice blue"><p><b>${esc(state.source)}</b><br>${summary}</p></div><div class="tools"><label class="search global"><input id="search" placeholder="Группа, фамилия, кабинет, корпус, специальность…" value="${esc(ui.q)}" autocomplete="off" aria-label="Общий поиск"></label><button class="btn" id="reset">Сбросить фильтры</button></div>${betaToggle()}<div id="suggestions" class="chips wrapc"></div><div class="tools">${Object.entries(
+    `<section class="view"><div class="notice blue"><p><b>${esc(state.source)}</b><br>${summary}</p></div><div class="tools"><label class="search global"><input id="search" placeholder="Группа, фамилия, кабинет, корпус, специальность…" value="${esc(ui.q)}" autocomplete="off" aria-label="Общий поиск"></label><button class="btn" id="today">Сегодня</button><button class="btn" id="tomorrow">Завтра</button><button class="btn" id="reset">Сбросить фильтры</button></div>${betaToggle()}<div id="suggestions" class="chips wrapc"></div><div class="tools">${Object.entries(
       labels,
     )
       .map(([k, v]) => select(k, list(k), ui.filters[k], v))
       .join(
         "",
-      )}${select("date", allDates, ui.filters.date, "День / вся неделя")}</div><div class="status"><span class="pill">Показано: ${visible.length}</span><span class="pill bad">Конфликтов: ${analysis.length}</span><span class="pill">Изменено: ${state.lessons.filter((l) => scope(l) && Model.changed(l, state.baseline)).length}</span></div>${ui.moving ? '<div class="notice blue"><p>Выберите вторую пару для обмена. Время занятий поменяется местами; каждое занятие подгруппы меняется отдельно.</p><button class="btn" id="cancel-move">Отмена обмена</button></div>' : ""}${myIssues().length ? `<details class="card"><summary>Замечания по файлу: ${myIssues().length}</summary><p>Пары, у которых в файле не указан кабинет или преподаватель. Они загружены, просто проверьте их.</p>${myIssues().map((x) => `<p>${esc(x.where)}: ${esc(x.reason)} — ${esc(x.raw)}</p>`).join("")}</details>` : ""}<div class="print-title"><h2>КузТАГиС · расписание</h2><p>${
+      )}${select("date", allDates, ui.filters.date, "День / вся неделя")}</div><div class="status"><span class="pill">Показано: ${visible.length}</span><span class="pill bad">Конфликтов: ${analysis.length}</span><span class="pill">Изменено: ${state.lessons.filter((l) => scope(l) && Model.changed(l, state.baseline)).length}</span>${Tools.unsaved(state) ? '<span class="pill warn">Правки не скачаны в Excel</span>' : ""}</div>${ui.moving ? '<div class="notice blue"><p>Выберите вторую пару для обмена. Время занятий поменяется местами; каждое занятие подгруппы меняется отдельно.</p><button class="btn" id="cancel-move">Отмена обмена</button></div>' : ""}${Tools.notesHtml(ui.loadNotes, esc)}${myIssues().length ? `<details class="card"><summary>Замечания по файлу: ${myIssues().length}</summary><p>Пары, у которых в файле не указан кабинет или преподаватель. Они загружены, просто проверьте их.</p>${myIssues().map((x) => `<p>${esc(x.where)}: ${esc(x.reason)} — ${esc(x.raw)}</p>`).join("")}</details>` : ""}<div class="print-title"><h2>КузТАГиС · расписание</h2><p>${
       Object.entries(ui.filters)
         .filter(([, v]) => v)
         .map(([k, v]) => esc((labels[k] || "Дата") + ": " + v))
@@ -399,6 +400,13 @@ function schedule() {
         "",
       )}</div>${printTable(visible)}${visible.length ? "" : "<p>Ничего не найдено. Измените фильтры.</p>"}<details class="card no-print"><summary>Свободные кабинеты</summary><p class="hint">Только кабинеты, известные программе. Свободно означает отсутствие записи в загруженном расписании; полнота файла не подтверждена. Текстовые аудитории также проверяются по точному названию.</p><label>Дата <select class="inp" id="free-date">${allDates.map((d) => `<option ${d === ui.filters.date ? "selected" : ""}>${d}</option>`).join("")}</select></label> <label>Пара <input class="inp" id="free-period" type="number" min="1" max="20" value="${ui.freePeriod}"></label><button class="btn" id="free-check">Показать</button><p id="free-result"></p></details></section>`;
   bindBeta();
+  for (const [id, shift, word] of [["today", 0, "Сегодня"], ["tomorrow", 1, "Завтра"]])
+    $(id).onclick = () => {
+      const d = Tools.dayFilter(state, shift);
+      if (!d) return notify(word + " — этого дня нет в загруженной неделе");
+      ui.filters.date = d;
+      render();
+    };
   $("search").oninput = (e) => {
     ui.q = e.target.value;
     suggestions();
@@ -583,7 +591,7 @@ function editor(id) {
 function refs() {
   const groups = list("group");
   $("main").innerHTML =
-    `<section class="view"><h2 class="ttl">Справочник групп</h2><p class="sub">Специальности и отделения заполнены автоматически. Если что-то не так, исправьте и нажмите «Сохранить справочник».</p><div class="tbl"><table><thead><tr><th>Группа</th><th>Специальность</th><th>Отделение</th></tr></thead><tbody>${groups.map((g, i) => `<tr><td>${esc(g)}</td><td><input aria-label="Специальность ${esc(g)}" class="inp specialty" data-group="${esc(g)}" value="${esc(state.catalog[g]?.specialty || "")}"></td><td><select aria-label="Отделение ${esc(g)}" class="inp group-dept" data-group="${esc(g)}"><option value="">Не указано</option>${state.departments.map((d) => `<option ${d === state.catalog[g]?.department ? "selected" : ""}>${esc(d)}</option>`).join("")}</select></td></tr>`).join("")}</tbody></table></div><button class="btn blue" id="save-catalog">Сохранить справочник</button><details class="card"><summary>Отделения техникума (${state.departments.length})</summary><p class="hint">Дорожное отделение: Строительство и эксплуатация автомобильных дорог, аэродромов и эксплуатация беспилотных авиационных систем.</p><div id="dept-list">${state.departments.map((d, i) => `<input class="inp full department-name" data-index="${i}" value="${esc(d)}" aria-label="Отделение ${i + 1}">`).join("")}</div><div class="actions"><button class="btn" id="add-department">Добавить отделение</button><button class="btn blue" id="save-departments">Сохранить названия</button></div></details><div class="card"><h3>Известные кабинеты</h3><p class="hint">Один кабинет в строке. Добавьте полный список для проверки свободных кабинетов.</p><textarea class="inp" id="room-catalog" rows="6">${esc(list("room").join("\n"))}</textarea><button class="btn" id="save-rooms">Сохранить кабинеты</button></div></section>`;
+    `<section class="view"><h2 class="ttl">Справочник групп</h2><p class="sub">Специальности и отделения заполнены автоматически. Если что-то не так, исправьте и нажмите «Сохранить справочник».</p><div class="tbl catalog"><table><thead><tr><th>Группа</th><th>Специальность</th><th>Отделение</th></tr></thead><tbody>${groups.map((g, i) => `<tr><td>${esc(g)}</td><td><input aria-label="Специальность ${esc(g)}" class="inp specialty" data-group="${esc(g)}" value="${esc(state.catalog[g]?.specialty || "")}"></td><td><select aria-label="Отделение ${esc(g)}" class="inp group-dept" data-group="${esc(g)}"><option value="">Не указано</option>${state.departments.map((d) => `<option ${d === state.catalog[g]?.department ? "selected" : ""}>${esc(d)}</option>`).join("")}</select></td></tr>`).join("")}</tbody></table></div><button class="btn blue" id="save-catalog">Сохранить справочник</button><details class="card"><summary>Отделения техникума (${state.departments.length})</summary><p class="hint">Дорожное отделение: Строительство и эксплуатация автомобильных дорог, аэродромов и эксплуатация беспилотных авиационных систем.</p><div id="dept-list">${state.departments.map((d, i) => `<input class="inp full department-name" data-index="${i}" value="${esc(d)}" aria-label="Отделение ${i + 1}">`).join("")}</div><div class="actions"><button class="btn" id="add-department">Добавить отделение</button><button class="btn blue" id="save-departments">Сохранить названия</button></div></details><div class="card"><h3>Известные кабинеты</h3><p class="hint">Один кабинет в строке. Добавьте полный список для проверки свободных кабинетов.</p><textarea class="inp" id="room-catalog" rows="6">${esc(list("room").join("\n"))}</textarea><button class="btn" id="save-rooms">Сохранить кабинеты</button></div></section>`;
   $("add-department").onclick = () => {
     const input = document.createElement("input");
     input.className = "inp department-name";
@@ -732,7 +740,7 @@ function settings() {
 }
 function help() {
   $("main").innerHTML =
-    `<section class="view"><h2 class="ttl">Как пользоваться</h2><div class="card"><ol class="steps"><li><b>Загрузите файл.</b> Нажмите «Загрузить файл» и выберите Excel недели (.xlsx), который выдаёт программа учебной части. Программа сама найдёт группы ${esc(scopeName())}.</li><li><b>Найдите нужное.</b> Начните вводить группу, фамилию или кабинет в строку поиска и нажмите подсказку. Можно выбрать группу, преподавателя, кабинет, корпус или день в списках. «Сбросить фильтры» — снова всё расписание.</li><li><b>Поправьте пару.</b> Нажмите на пару, чтобы сменить преподавателя или кабинет. Чтобы поменять две пары местами, нажмите «Обменять с другой парой», затем вторую пару, или просто перетащите одну пару на другую.</li><li><b>Следите за красным.</b> Красным выделены конфликты: группа, преподаватель или кабинет в двух местах одновременно. Ошибочную правку отмените кнопкой «Отменить».</li><li><b>Скачайте Excel.</b> Кнопка «Excel» скачивает тот же файл, что вы загрузили: те же листы и оформление, изменены только поправленные пары. В имени файла будет «(изменено)». Если после правок есть конфликты или что-то не помещается в файл, программа покажет список и спросит «Вы уверены?» — скачать можно всё равно.</li><li><b>Печать.</b> Выберите группу, преподавателя или кабинет и нажмите «Печать / PDF». В окне печати выберите А4 или «Сохранить как PDF».</li></ol><p class="hint">Файл никуда не отправляется: всё работает в браузере на этом компьютере. Если вкладку закрыли, при следующем открытии нажмите «Продолжить». Галочка «Работа со всеми отделениями» — бета-тестирование для остальных отделений.</p></div></section>`;
+    `<section class="view"><h2 class="ttl">Как пользоваться</h2><div class="card"><ol class="steps"><li><b>Загрузите файл.</b> Нажмите «Загрузить файл» и выберите Excel недели (.xlsx), который выдаёт программа учебной части. Программа сама найдёт группы ${esc(scopeName())}.</li><li><b>Найдите нужное.</b> Начните вводить группу, фамилию или кабинет в строку поиска и нажмите подсказку. Можно выбрать группу, преподавателя, кабинет, корпус или день в списках. «Сбросить фильтры» — снова всё расписание.</li><li><b>Поправьте пару.</b> Нажмите на пару, чтобы сменить преподавателя или кабинет. Чтобы поменять две пары местами, нажмите «Обменять с другой парой», затем вторую пару, или просто перетащите одну пару на другую.</li><li><b>Следите за красным.</b> Красным выделены конфликты: группа, преподаватель или кабинет в двух местах одновременно. Ошибочную правку отмените кнопкой «Отменить».</li><li><b>Скачайте Excel.</b> Кнопка «Excel» скачивает тот же файл, что вы загрузили: те же листы и оформление, изменены только поправленные пары. В имени файла будет «(изменено)». Если после правок есть конфликты или что-то не помещается в файл, программа покажет список и спросит «Вы уверены?» — скачать можно всё равно.</li><li><b>Сервис.</b> На вкладке «Сервис»: замена заболевшего преподавателя (программа сама покажет, кто свободен), список всех правок с кнопкой «Вернуть», занятость любого кабинета на неделю и нагрузка преподавателей.</li><li><b>Сегодня и завтра.</b> Кнопки над фильтрами сразу показывают нужный день.</li><li><b>Печать.</b> Выберите группу, преподавателя или кабинет и нажмите «Печать / PDF». В окне печати выберите А4 или «Сохранить как PDF».</li></ol><p class="hint">Файл никуда не отправляется: всё работает в браузере на этом компьютере. Если вкладку закрыли, при следующем открытии нажмите «Продолжить». Галочка «Работа со всеми отделениями» — бета-тестирование для остальных отделений.</p></div></section>`;
 }
 $("import").onclick = () => $("file").click();
 $("file").onchange = async (e) => {
@@ -763,8 +771,12 @@ $("file").onchange = async (e) => {
       ui.tab = "schedule";
       Object.keys(ui.filters).forEach((k) => (ui.filters[k] = ""));
     });
+    ui.loadNotes = Tools.afterLoad(state, data.issues);
+    render();
     const mine = data.lessons.filter(scope);
-    if (!mine.length)
+    if (ui.loadNotes.problems.length)
+      notify("Похоже, с файлом что-то не так: " + ui.loadNotes.problems[0] + ". Подробнее — вверху расписания.");
+    else if (!mine.length)
       notify(
         `Загружено ${data.lessons.length} занятий, но групп «${scopeName()}» в файле не найдено. Проверьте шаблон групп в «Настройках».`,
       );
@@ -792,6 +804,9 @@ $("export").onclick = async () => {
     }
     const n = await Export.original(state, bytes, state.source, askConfirm, newConflicts());
     if (n === null) return notify("Скачивание отменено, правки на месте");
+    state.exportedSig = Tools.sig(state);
+    persist();
+    render();
     notify(
       n
         ? `Excel сохранён в исходном виде. Изменённых пар: ${n}`
@@ -841,6 +856,11 @@ document.addEventListener("keydown", (e) => {
 $("scrim").onclick = (e) => {
   if (e.target === $("scrim")) close();
 };
+window.addEventListener("beforeunload", (e) => {
+  if (!Tools.unsaved(state)) return;
+  e.preventDefault();
+  e.returnValue = "";
+});
 render();
 
 // Dedicated print rows prevent browser column pagination from separating period labels and lessons.
@@ -924,3 +944,128 @@ $("main").addEventListener(
   },
   true,
 );
+
+/* Вкладка «Сервис»: замена преподавателя, правки, занятость кабинета, нагрузка. */
+function tools() {
+  if (!state.lessons.length) {
+    $("main").innerHTML =
+      '<section class="view"><h2 class="ttl">Сервис</h2><div class="card"><p>Сначала загрузите расписание на вкладке «Расписание».</p></div></section>';
+    return;
+  }
+  ui.svc = ui.svc || {};
+  const s = ui.svc;
+  const teachers = list("teacher");
+  const dates = [...new Set([...(state.dates || []), ...state.lessons.map((l) => l.date)])].sort();
+  const rooms = [...new Set([...state.rooms, ...state.lessons.map((l) => l.room)])]
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b, "ru", { numeric: true }));
+  const opt = (v, cur, label) =>
+    `<option value="${esc(v)}" ${v === cur ? "selected" : ""}>${esc(label ?? v)}</option>`;
+  const dayName = (d) =>
+    new Date(d + "T12:00:00").toLocaleDateString("ru", { weekday: "long" }) + ", " + dm(d);
+
+  /* замена преподавателя */
+  let sub = "";
+  if (s.teacher) {
+    const ls = state.lessons
+      .filter((l) => scope(l) && l.teacher === s.teacher && (!s.day || l.date === s.day))
+      .sort((a, b) => a.date.localeCompare(b.date) || (a.period ?? -1) - (b.period ?? -1));
+    sub = ls.length
+      ? ls
+          .map((l) => {
+            const c = Tools.candidates(state, l);
+            return `<div class="sub-row"><p><b>${esc(dayName(l.date))}, ${esc(pairName(l.period))}</b> · ${esc(l.groups.join(", "))}${l.subgroup ? ", " + l.subgroup + " подгр." : ""} · ${esc(l.subject)} · ауд. ${esc(l.room || "?")}</p><div class="sub-pick"><select class="inp sub-cand" data-id="${esc(l.id)}">${c
+              .map((x) => opt(x.t, "", (x.same ? "★ " : "") + x.t))
+              .join("")}</select><button class="btn blue sub-apply" data-id="${esc(l.id)}" ${c.length ? "" : "disabled"}>Заменить</button></div></div>`;
+          })
+          .join("")
+      : '<p class="hint">У этого преподавателя нет пар в выбранный день.</p>';
+  }
+
+  /* правки */
+  const ch = Tools.changes(state).filter((x) => scope(x.l));
+  const fmt = (x) =>
+    `${dm(x.date)}, ${pairName(x.period)}: ${x.subject} (${x.teacher || "без преподавателя"}, ауд. ${x.room || "?"})`;
+
+  /* занятость кабинета */
+  let grid = "";
+  if (s.room) {
+    const ls = state.lessons.filter((l) => l.room === s.room);
+    const periods = [...new Set([null, 1, 2, 3, 4, 5, 6, ...ls.map((l) => l.period)])].filter(
+      (p) => p !== null || ls.some((l) => l.period === null),
+    );
+    grid = `<div class="tbl"><table class="room-grid"><thead><tr><th>Пара</th>${dates
+      .map((d) => `<th>${esc(Tools.DAY[Tools.dayOf(d)])} ${esc(dm(d))}</th>`)
+      .join("")}</tr></thead><tbody>${periods
+      .map(
+        (p) =>
+          `<tr><td>${p === null ? "до 1-й" : p}</td>${dates
+            .map((d) => {
+              const here = ls.filter((l) => l.date === d && l.period === p);
+              return here.length
+                ? `<td class="busy">${esc([...new Set(here.flatMap((l) => l.groups))].join(", "))}</td>`
+                : '<td class="free">свободно</td>';
+            })
+            .join("")}</tr>`,
+      )
+      .join("")}</tbody></table></div>`;
+  }
+
+  /* нагрузка */
+  const load = Tools.load(state, teachers);
+
+  $("main").innerHTML = `<section class="view"><h2 class="ttl">Сервис</h2>
+  <div class="card"><h3>Замена преподавателя</h3><p class="hint">Выберите, кто не может прийти, и день. Для каждой его пары показаны свободные в это время преподаватели; ★ — те, кто ведёт этот же предмет.</p><div class="tools"><label class="filter">Преподаватель<select class="inp" id="sub-teacher"><option value="">Выберите</option>${teachers
+    .map((t) => opt(t, s.teacher))
+    .join("")}</select></label><label class="filter">День<select class="inp" id="sub-day"><option value="">Вся неделя</option>${dates
+    .map((d) => opt(d, s.day, dayName(d)))
+    .join("")}</select></label></div>${sub}</div>
+  <div class="card"><h3>Правки (${ch.length})</h3>${
+    ch.length
+      ? `<p class="hint">Всё, что изменено по сравнению с загруженным файлом. «Вернуть» возвращает пару как было; у обмена возвращаются обе пары.</p><ul class="changes">${ch
+          .map(
+            (x) =>
+              `<li><b>${esc(x.l.groups.join(", "))}</b>: <s>${esc(fmt(x.b))}</s> → ${esc(fmt(x.l))} <button class="btn small revert" data-id="${esc(x.l.id)}">Вернуть</button></li>`,
+          )
+          .join("")}</ul>`
+      : '<p class="hint">Правок пока нет.</p>'
+  }</div>
+  <div class="card"><h3>Занятость кабинета на неделю</h3><label class="filter">Кабинет<select class="inp" id="room-pick"><option value="">Выберите</option>${rooms
+    .map((r) => opt(r, s.room, r + (Model.roomInfo(r) ? " — " + Model.roomInfo(r).name : "")))
+    .join("")}</select></label>${grid}</div>
+  <div class="card"><h3>Нагрузка преподавателей</h3><p class="hint">Пары за неделю по всему файлу (поток считается одной парой). «Окна» — пустые пары между занятиями в один день.</p><div class="tbl"><table><thead><tr><th>Преподаватель</th><th>Пар</th><th>Дней</th><th>Окна</th></tr></thead><tbody>${load
+    .map(
+      (x) =>
+        `<tr><td>${esc(x.t)}</td><td>${x.pairs}</td><td>${x.days}</td><td class="${x.windows ? "warn-t" : ""}">${x.windows}</td></tr>`,
+    )
+    .join("")}</tbody></table></div></div></section>`;
+
+  $("sub-teacher").onchange = (e) => {
+    s.teacher = e.target.value;
+    render();
+  };
+  $("sub-day").onchange = (e) => {
+    s.day = e.target.value;
+    render();
+  };
+  document.querySelectorAll(".sub-apply").forEach(
+    (b) =>
+      (b.onclick = () => {
+        const id = b.dataset.id,
+          t = document.querySelector(`.sub-cand[data-id="${CSS.escape(id)}"]`).value;
+        commit(() => (state.lessons.find((l) => l.id === id).teacher = t));
+        notify("Преподаватель заменён: " + t);
+      }),
+  );
+  document.querySelectorAll(".revert").forEach(
+    (b) =>
+      (b.onclick = () => {
+        commit(() => Tools.revert(state, b.dataset.id));
+        notify("Пара возвращена как в файле");
+      }),
+  );
+  $("room-pick").onchange = (e) => {
+    s.room = e.target.value;
+    render();
+  };
+}
