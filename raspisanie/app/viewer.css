@@ -328,3 +328,17 @@ details > summary {
 .beta-tag{white-space:nowrap;font-size:12px;font-weight:600;color:#b25000;background:#fff2e0;border-radius:999px;padding:2px 8px}
 .beta-note{margin:0 0 8px}
 @media print{.beta-toggle,.beta-note{display:none}}
+.inp.full{display:block;width:100%;margin:6px 0}
+details.card>summary{cursor:pointer;font-weight:600}
+details.card[open]>summary{margin-bottom:10px}
+.bells{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.bells .filter textarea{width:100%;min-height:150px}
+.tbl input.specialty{width:100%;min-width:220px}
+@media (max-width:640px){
+  .tbl table,.tbl tbody,.tbl tr,.tbl td{display:block;width:100%}
+  .tbl thead{display:none}
+  .tbl tr{padding:10px 0;border-bottom:1px solid var(--line,#e5e5ea)}
+  .tbl td{padding:3px 0}
+  .tbl td:first-child{font-weight:600}
+  .tbl input.specialty{min-width:0}
+}

@@ -28,6 +28,12 @@ if (saved) {
 }
 /* Каждый запуск — только своё отделение; все отделения включаются галочкой вручную. */
 for (const s of [state, saved]) if (s?.settings) s.settings.allDepartments = false;
+if (saved)
+  saved.catalog = Model.fillCatalog(
+    saved.catalog,
+    [...new Set(saved.lessons.flatMap((l) => l.groups))],
+    saved.settings,
+  );
 const ui = {
   tab: "schedule",
   filters: {
@@ -80,7 +86,8 @@ let visible = [],
   analysis = [];
 function notify(s) {
   $("message").textContent = s;
-  setTimeout(() => ($("message").textContent = ""), 7000);
+  clearTimeout(notify.t);
+  notify.t = setTimeout(() => ($("message").textContent = ""), 4500);
 }
 function persist() {
   try {
@@ -198,7 +205,7 @@ function card(l) {
       x.subgroup === l.subgroup &&
       x.groups.join() === l.groups.join(),
   );
-  return `<button class="les ${conflicts.length ? "bad" : ""} ${ui.moving === l.id ? "selected" : ""}" style="--h:211" data-lesson="${esc(l.id)}"><span class="s">${esc(l.subject)}</span><span class="m">${esc(l.groups.join(", "))}${l.subgroup ? " · " + l.subgroup + " подгр." : ""}</span><span class="m">${esc(l.teacher || "Преподаватель не указан")}</span><span class="m">${esc(l.room ? "Ауд. " + l.room : "Кабинет не указан")}${Model.building(l.room, state.settings) ? " · корпус " + Model.building(l.room, state.settings) : ""}</span><span class="tags">${Model.changed(l, state.baseline) ? '<span class="tag mv">Изменено</span>' : ""}${same ? '<span class="tag db">Последовательные пары</span>' : ""}${conflicts.length ? `<span class="tag bd">${esc([...new Set(conflicts.flatMap((c) => c.types))].join(", "))}</span>` : ""}</span></button>`;
+  return `<button class="les ${conflicts.length ? "bad" : ""} ${ui.moving === l.id ? "selected" : ""}" style="--h:211" data-lesson="${esc(l.id)}"><span class="s">${esc(l.subject)}</span><span class="m">${esc(l.groups.join(", "))}${l.subgroup ? " · " + l.subgroup + " подгр." : ""}</span>${l.teacher || l.period !== null ? `<span class="m">${esc(l.teacher || "Преподаватель не указан")}</span>` : ""}<span class="m">${esc(l.room ? "Ауд. " + l.room : "Кабинет не указан")}${Model.building(l.room, state.settings) ? " · корпус " + Model.building(l.room, state.settings) : ""}</span><span class="tags">${Model.changed(l, state.baseline) ? '<span class="tag mv">Изменено</span>' : ""}${same ? '<span class="tag db">Сдвоенная пара</span>' : ""}${conflicts.length ? `<span class="tag bd">${esc([...new Set(conflicts.flatMap((c) => c.types))].join(", "))}</span>` : ""}</span></button>`;
 }
 function render() {
   const oldBad = new Set(
@@ -226,6 +233,22 @@ function render() {
         { transform: "scale(1)", opacity: 1 },
       ]);
   });
+}
+const dm = (d) =>
+  d ? new Date(d + "T12:00:00").toLocaleDateString("ru", { day: "2-digit", month: "2-digit" }) : "";
+const pairName = (p) => (p == null ? "перед первой парой" : p + " пара");
+function plural(n, a, b, c) {
+  const m = n % 100, k = n % 10;
+  return m > 10 && m < 20 ? c : k === 1 ? a : k > 1 && k < 5 ? b : c;
+}
+/* Замечания загрузки — только по парам отделения в работе. */
+function myIssues() {
+  const cells = new Set(
+    state.lessons
+      .filter(scope)
+      .map((l) => l.source?.sheet + "!" + l.source?.cell),
+  );
+  return (state.issues || []).filter((x) => cells.has(x.where));
 }
 function welcome() {
   visible = [];
@@ -260,18 +283,19 @@ function schedule() {
       .map(([k, v]) => select(k, list(k), ui.filters[k], v))
       .join(
         "",
-      )}${select("date", allDates, ui.filters.date, "День / вся неделя")}</div><div class="status"><span class="pill">Показано: ${visible.length}</span><span class="pill bad">Конфликтов: ${analysis.length}</span><span class="pill">Изменено: ${state.lessons.filter((l) => scope(l) && Model.changed(l, state.baseline)).length}</span></div>${ui.moving ? '<div class="notice blue"><p>Выберите вторую пару для обмена. Время занятий поменяется местами; каждое занятие подгруппы меняется отдельно.</p><button class="btn" id="cancel-move">Отмена обмена</button></div>' : ""}<details class="card"><summary>Отчёт загрузки: ${state.issues.length} замечаний</summary><p>Занятия с недостающими полями сохранены. Непрочитанные строки перечислены отдельно.</p>${state.issues.map((x) => `<p>${esc(x.where)}: ${esc(x.reason)} — ${esc(x.raw)}</p>`).join("") || "<p>Замечаний нет.</p>"}</details><div class="print-title"><h2>КузТАГиС · расписание</h2><p>${
+      )}${select("date", allDates, ui.filters.date, "День / вся неделя")}</div><div class="status"><span class="pill">Показано: ${visible.length}</span><span class="pill bad">Конфликтов: ${analysis.length}</span><span class="pill">Изменено: ${state.lessons.filter((l) => scope(l) && Model.changed(l, state.baseline)).length}</span></div>${ui.moving ? '<div class="notice blue"><p>Выберите вторую пару для обмена. Время занятий поменяется местами; каждое занятие подгруппы меняется отдельно.</p><button class="btn" id="cancel-move">Отмена обмена</button></div>' : ""}${myIssues().length ? `<details class="card"><summary>Замечания по файлу: ${myIssues().length}</summary><p>Пары, у которых в файле не указан кабинет или преподаватель. Они загружены, просто проверьте их.</p>${myIssues().map((x) => `<p>${esc(x.where)}: ${esc(x.reason)} — ${esc(x.raw)}</p>`).join("")}</details>` : ""}<div class="print-title"><h2>КузТАГиС · расписание</h2><p>${
       Object.entries(ui.filters)
         .filter(([, v]) => v)
         .map(([k, v]) => esc((labels[k] || "Дата") + ": " + v))
         .join(" · ") || scopeName()
     }</p></div><div class="week">${dates
+      .filter((date) => ui.filters.date || visible.some((x) => x.date === date))
       .map((date) => {
         const lessons = visible.filter((x) => x.date === date);
         const periods = [...new Set(lessons.map((x) => x.period))].sort(
           (a, b) => (a ?? -1) - (b ?? -1),
         );
-        return `<div class="day"><div class="day-h"><b>${new Date(date + "T12:00:00").toLocaleDateString("ru", { weekday: "long" })}</b><span>${esc(date)}</span></div>${
+        return `<div class="day"><div class="day-h"><b>${new Date(date + "T12:00:00").toLocaleDateString("ru", { weekday: "long" })}</b><span>${esc(dm(date))}</span></div>${
           periods
             .map(
               (p) =>
@@ -394,7 +418,7 @@ function editor(id) {
   ui.editId = id;
   const old = state.baseline.find((x) => x.id === id);
   $("sheet").innerHTML =
-    `<h3>${esc(l.subject)}</h3><p>${esc(l.groups.join(", "))} · ${esc(l.date)} · ${l.period ?? "перед первой парой"} ${l.subgroup ? "· " + l.subgroup + " подгр." : ""}</p><label class="field">Преподаватель<input class="inp" id="edit-teacher" list="teachers" value="${esc(l.teacher)}"></label><datalist id="teachers">${list(
+    `<h3>${esc(l.subject)}</h3><p>${esc(l.groups.join(", "))} · ${esc(new Date(l.date + "T12:00:00").toLocaleDateString("ru", { weekday: "long" }) + ", " + dm(l.date))} · ${pairName(l.period)} ${l.subgroup ? "· " + l.subgroup + " подгр." : ""}</p><label class="field">Преподаватель<input class="inp" id="edit-teacher" list="teachers" value="${esc(l.teacher)}"></label><datalist id="teachers">${list(
       "teacher",
     )
       .map((t) => `<option value="${esc(t)}">`)
@@ -406,7 +430,7 @@ function editor(id) {
       .map((t) => `<option value="${esc(t)}">`)
       .join(
         "",
-      )}</datalist><p class="hint">В исходном файле: ${esc(old?.teacher)} · ${esc(old?.room)} · ${esc(old?.date)} · ${old?.period ?? "без номера"}</p><p id="edit-conflicts" role="status"></p><div class="actions"><button class="btn blue" id="edit-save">Сохранить</button><button class="btn" id="edit-swap">Обменять с другой парой</button><button class="btn" id="edit-close">Закрыть</button></div>`;
+      )}</datalist><p class="hint">Было в файле: ${esc(old?.teacher || "преподаватель не указан")}, ауд. ${esc(old?.room || "не указана")}, ${esc(dm(old?.date))}, ${esc(pairName(old?.period))}</p><p id="edit-conflicts" role="status"></p><div class="actions"><button class="btn blue" id="edit-save">Сохранить</button><button class="btn" id="edit-swap">Обменять с другой парой</button><button class="btn" id="edit-close">Закрыть</button></div>`;
   $("scrim").hidden = false;
   requestAnimationFrame(() => $("scrim").classList.add("open"));
   const preview = () => {
@@ -447,12 +471,12 @@ function editor(id) {
 function refs() {
   const groups = list("group");
   $("main").innerHTML =
-    `<section class="view"><h2 class="ttl">Справочник</h2><p class="sub">Неизвестные специальности и отделения оставлены пустыми. Изменения сохраняются на этом компьютере.</p><div class="card"><h3>Отделения</h3><p class="hint">Полное название Дорожного отделения: Строительство и эксплуатация автомобильных дорог, аэродромов и эксплуатация беспилотных авиационных систем.</p>${state.departments.map((d, i) => `<label class="field">Название<input class="inp department-name" data-index="${i}" value="${esc(d)}"></label>`).join("")}<button class="btn" id="add-department">Добавить отделение</button><button class="btn blue" id="save-departments">Сохранить названия</button></div><div class="tbl"><table><thead><tr><th>Группа</th><th>Специальность</th><th>Отделение</th></tr></thead><tbody>${groups.map((g, i) => `<tr><td>${esc(g)}</td><td><input aria-label="Специальность ${esc(g)}" class="inp specialty" data-group="${esc(g)}" value="${esc(state.catalog[g]?.specialty || "")}"></td><td><select aria-label="Отделение ${esc(g)}" class="inp group-dept" data-group="${esc(g)}"><option value="">Не указано</option>${state.departments.map((d) => `<option ${d === state.catalog[g]?.department ? "selected" : ""}>${esc(d)}</option>`).join("")}</select></td></tr>`).join("")}</tbody></table></div><button class="btn blue" id="save-catalog">Сохранить справочник</button><div class="card"><h3>Известные кабинеты</h3><p class="hint">Один кабинет в строке. Добавьте полный список для проверки свободных кабинетов.</p><textarea class="inp" id="room-catalog" rows="6">${esc(list("room").join("\n"))}</textarea><button class="btn" id="save-rooms">Сохранить кабинеты</button></div></section>`;
+    `<section class="view"><h2 class="ttl">Справочник групп</h2><p class="sub">Специальности и отделения заполнены автоматически. Если что-то не так, исправьте и нажмите «Сохранить справочник».</p><div class="tbl"><table><thead><tr><th>Группа</th><th>Специальность</th><th>Отделение</th></tr></thead><tbody>${groups.map((g, i) => `<tr><td>${esc(g)}</td><td><input aria-label="Специальность ${esc(g)}" class="inp specialty" data-group="${esc(g)}" value="${esc(state.catalog[g]?.specialty || "")}"></td><td><select aria-label="Отделение ${esc(g)}" class="inp group-dept" data-group="${esc(g)}"><option value="">Не указано</option>${state.departments.map((d) => `<option ${d === state.catalog[g]?.department ? "selected" : ""}>${esc(d)}</option>`).join("")}</select></td></tr>`).join("")}</tbody></table></div><button class="btn blue" id="save-catalog">Сохранить справочник</button><details class="card"><summary>Отделения техникума (${state.departments.length})</summary><p class="hint">Дорожное отделение: Строительство и эксплуатация автомобильных дорог, аэродромов и эксплуатация беспилотных авиационных систем.</p><div id="dept-list">${state.departments.map((d, i) => `<input class="inp full department-name" data-index="${i}" value="${esc(d)}" aria-label="Отделение ${i + 1}">`).join("")}</div><div class="actions"><button class="btn" id="add-department">Добавить отделение</button><button class="btn blue" id="save-departments">Сохранить названия</button></div></details><div class="card"><h3>Известные кабинеты</h3><p class="hint">Один кабинет в строке. Добавьте полный список для проверки свободных кабинетов.</p><textarea class="inp" id="room-catalog" rows="6">${esc(list("room").join("\n"))}</textarea><button class="btn" id="save-rooms">Сохранить кабинеты</button></div></section>`;
   $("add-department").onclick = () => {
     const input = document.createElement("input");
     input.className = "inp department-name";
     input.placeholder = "Новое отделение";
-    $("add-department").before(input);
+    $("dept-list").appendChild(input);
     input.focus();
   };
   $("save-departments").onclick = () => {
@@ -499,7 +523,7 @@ function refs() {
 }
 function settings() {
   $("main").innerHTML =
-    `<section class="view"><h2 class="ttl">Настройки</h2><div class="card"><h3>Отделение в работе</h3><p class="hint">Смотреть и править можно только группы этого отделения. Остальные группы файла не показываются и не меняются, но учитываются при проверке кабинетов и преподавателей. Шаблон «-(Д|БС)$» означает группы, оканчивающиеся на -Д и -БС. Если очистить шаблон, будет весь техникум.</p><label class="field">Название<input class="inp" id="scope-name" value="${esc(Model.withDefaults(state.settings).scopeName)}"></label><label class="field">Шаблон групп<input class="inp" id="scope-pattern" value="${esc(Model.withDefaults(state.settings).scopePattern)}"></label></div><div class="card"><h3>Корпус по номеру кабинета</h3><p class="hint">Регулярное выражение и номер группы захвата. Этаж не вычисляется. Текст «1 этаж» сохраняется без разбора.</p><input class="inp" id="pattern" value="${esc(state.settings.roomPattern)}"><input class="inp" id="capture" type="number" min="1" value="${state.settings.roomGroup}"></div><div class="card"><h3>Звонки</h3><p class="hint">Каждая строка: начало–конец, например 08:30–10:00. Число строк задаёт число пар.</p>${[
+    `<section class="view"><h2 class="ttl">Настройки</h2><details class="card tech"><summary>Для настройщика: отделение и корпуса</summary><h3>Отделение в работе</h3><p class="hint">Смотреть и править можно только группы этого отделения. Остальные группы файла не показываются и не меняются, но учитываются при проверке кабинетов и преподавателей. Шаблон «-(Д|БС)$» означает группы, оканчивающиеся на -Д и -БС. Если очистить шаблон, будет весь техникум.</p><label class="field">Название<input class="inp" id="scope-name" value="${esc(Model.withDefaults(state.settings).scopeName)}"></label><label class="field">Шаблон групп<input class="inp" id="scope-pattern" value="${esc(Model.withDefaults(state.settings).scopePattern)}"></label><h3>Корпус по номеру кабинета</h3><p class="hint">Сейчас корпус — первая цифра номера кабинета. Этаж не вычисляется, «1 этаж» (спортзал) остаётся текстом.</p><label class="field">Правило<input class="inp" id="pattern" value="${esc(state.settings.roomPattern)}"></label><label class="field">Номер части<input class="inp" id="capture" type="number" min="1" value="${state.settings.roomGroup}"></label><p class="hint">Изменения сохраняются кнопкой «Сохранить настройки» ниже.</p></details><div class="card"><h3>Звонки</h3><p class="hint">По расписанию звонков техникума. Каждая строка — одна пара: начало–конец.</p><div class="bells">${[
       ["mon", "Понедельник"],
       ["wk", "Остальные дни"],
       ["sat", "Суббота"],
@@ -510,7 +534,7 @@ function settings() {
       )
       .join(
         "",
-      )}<label class="field">Перед первой парой (понедельник, «Разговоры о важном»)<input class="inp" id="before" value="${state.settings.before.join("–")}"></label><button class="btn blue" id="save-settings">Сохранить настройки</button></div><div class="card"><h3>Правила конфликтов</h3><p class="hint">Не считаются конфликтом: потоки (один преподаватель, предмет и кабинет у нескольких групп) и «Разговор о важном» у нескольких групп в одном кабинете. Остальное настраивается здесь, сохраняется кнопкой «Сохранить настройки».</p><label class="filter">Общие помещения, где одновременно бывает много групп (спортзал), по одному в строке<textarea class="inp" id="shared-rooms" rows="3">${esc(Model.withDefaults(state.settings).sharedRooms.join("\n"))}</textarea></label><label class="filter">Занятия вне техникума: слово в названии (практика)<input class="inp" id="practice" value="${esc(Model.withDefaults(state.settings).practice)}"></label><label class="filter">Группы, которые пока не проверяются (временно, до выяснения)<textarea class="inp" id="ignore-groups" rows="2">${esc(Model.withDefaults(state.settings).ignoreGroups.join("\n"))}</textarea></label><button class="btn blue" id="save-rules">Сохранить правила</button></div><div class="card"><h3>Резервная копия</h3><p>Сохраняет расписание, оригинал, справочники и настройки. Можно перенести на другой компьютер.</p><button class="btn" id="backup">Скачать JSON</button><button class="btn" id="table-export">Excel-таблица текущей выборки</button><label class="btn">Восстановить JSON<input id="restore" type="file" accept=".json" hidden></label></div></section>`;
+      )}</div><label class="field">Перед первой парой (понедельник, «Разговоры о важном»)<input class="inp" id="before" value="${state.settings.before.join("–")}"></label><button class="btn blue" id="save-settings">Сохранить настройки</button></div><div class="card"><h3>Правила конфликтов</h3><p class="hint">Не считаются конфликтом: потоки (один преподаватель, предмет и кабинет у нескольких групп) и «Разговор о важном» у нескольких групп в одном кабинете. Остальное настраивается здесь, сохраняется кнопкой «Сохранить настройки».</p><label class="filter">Общие помещения, где одновременно бывает много групп (спортзал), по одному в строке<textarea class="inp" id="shared-rooms" rows="3">${esc(Model.withDefaults(state.settings).sharedRooms.join("\n"))}</textarea></label><label class="filter">Занятия вне техникума: слово в названии (практика)<input class="inp" id="practice" value="${esc(Model.withDefaults(state.settings).practice)}"></label><label class="filter">Группы, которые пока не проверяются (временно, до выяснения)<textarea class="inp" id="ignore-groups" rows="2">${esc(Model.withDefaults(state.settings).ignoreGroups.join("\n"))}</textarea></label><button class="btn blue" id="save-rules">Сохранить правила</button></div><div class="card"><h3>Резервная копия</h3><p>Сохраняет расписание, оригинал, справочники и настройки. Можно перенести на другой компьютер.</p><button class="btn" id="backup">Скачать JSON</button><button class="btn" id="table-export">Excel-таблица текущей выборки</button><label class="btn">Восстановить JSON<input id="restore" type="file" accept=".json" hidden></label></div></section>`;
   $("main").addEventListener("click", (e) => {
     if (e.target.id === "save-rules") $("save-settings").click();
   }, { once: true });
@@ -596,7 +620,7 @@ function settings() {
 }
 function help() {
   $("main").innerHTML =
-    `<section class="view"><h2 class="ttl">Как пользоваться</h2><div class="card"><ol class="steps"><li>Нажмите «Загрузить файл», выберите XLSX или CSV. Загрузка заменяет текущую неделю; её можно отменить. В отчёте проверьте замечания.</li><li>Введите группу, фамилию, кабинет, корпус, специальность или отделение в общий поиск и нажмите подсказку. Фильтры сочетаются. Выберите дату для просмотра дня.</li><li>Нажмите занятие, исправьте преподавателя или кабинет. Для обмена нажмите «Обменять с другой парой», затем выберите второе занятие. Подгруппы меняются отдельно, последовательные пары — каждая отдельно.</li><li>Красным отмечены пересечения группы, преподавателя или кабинета. Проверяется весь файл. Исходные конфликты тоже видны. Ошибочную правку отмените кнопкой или Ctrl+Z.</li><li>«Excel» скачивает тот же файл, что был загружен: те же листы, оформление и объединённые ячейки, меняются только исправленные пары. Плоская таблица текущей выборки — в «Настройках». Для печати выберите группу, преподавателя или кабинет и нажмите «Печать / PDF», в браузере выберите A4 и «Сохранить как PDF».</li><li>В справочнике заполните специальности и отделения, в настройках — точные звонки. Сохраните резервную копию JSON перед закрытием или переносом на другой компьютер.</li></ol><p>Программа работает без интернета, данные никуда не отправляются. При открытии программа пустая: загрузите файл недели. Незаконченную работу можно продолжить кнопкой на стартовом экране. CSV: UTF-8, разделитель «;» или запятая; столбцы: ${Reader.headers.join(", ")}. Дата ГГГГ-ММ-ДД, пустая пара — занятие до первой, подгруппа пустая/1/2, несколько групп разделяются |. Время можно оставить пустым — используются звонки.</p><p>В выгрузке нет полного перечня кабинетов: отсутствие занятия не гарантирует фактическую доступность. Неизвестное время отображается явно. Файлы фотографий не предоставлены; тестовые данные перенесены из Excel. Для загрузки без доработок используйте исходную матрицу с датой «Расписание на ДД.ММ.ГГГГ» в A1 и блоками групп B/H/N/T либо XLSX/CSV с перечисленными заголовками. Для адаптации нового вида пришлите 2–3 исходных Excel за разные недели с подгруппами и субботой; фото/PDF полезны только как дополнение.</p></div></section>`;
+    `<section class="view"><h2 class="ttl">Как пользоваться</h2><div class="card"><ol class="steps"><li><b>Загрузите файл.</b> Нажмите «Загрузить файл» и выберите Excel недели (.xlsx), который выдаёт программа учебной части. Программа сама найдёт группы ${esc(scopeName())}.</li><li><b>Найдите нужное.</b> Начните вводить группу, фамилию или кабинет в строку поиска и нажмите подсказку. Можно выбрать группу, преподавателя, кабинет, корпус или день в списках. «Сбросить фильтры» — снова всё расписание.</li><li><b>Поправьте пару.</b> Нажмите на пару, чтобы сменить преподавателя или кабинет. Чтобы поменять две пары местами, нажмите «Обменять с другой парой», затем вторую пару, или просто перетащите одну пару на другую.</li><li><b>Следите за красным.</b> Красным выделены конфликты: группа, преподаватель или кабинет в двух местах одновременно. Ошибочную правку отмените кнопкой «Отменить».</li><li><b>Скачайте Excel.</b> Кнопка «Excel» скачивает тот же файл, что вы загрузили: те же листы и оформление, изменены только поправленные пары. В имени файла будет «(изменено)».</li><li><b>Печать.</b> Выберите группу, преподавателя или кабинет и нажмите «Печать / PDF». В окне печати выберите А4 или «Сохранить как PDF».</li></ol><p class="hint">Файл никуда не отправляется: всё работает в браузере на этом компьютере. Если вкладку закрыли, при следующем открытии нажмите «Продолжить». Галочка «Работа со всеми отделениями» — бета-тестирование для остальных отделений.</p></div></section>`;
 }
 $("import").onclick = () => $("file").click();
 $("file").onchange = async (e) => {
@@ -613,7 +637,15 @@ $("file").onchange = async (e) => {
       const next = Model.initial(data);
       next.settings = state.settings;
       next.departments = state.departments;
-      next.catalog = { ...next.catalog, ...state.catalog };
+      const keep = Object.fromEntries(
+        Object.entries(state.catalog || {}).map(([g, c]) => [
+          g,
+          Object.fromEntries(Object.entries(c || {}).filter(([, v]) => v)),
+        ]),
+      );
+      for (const [g, c] of Object.entries(keep))
+        next.catalog[g] = { ...(next.catalog[g] || {}), ...c };
+      next.catalog = Model.fillCatalog(next.catalog, Object.keys(next.catalog), state.settings);
       next.rooms = [...new Set([...state.rooms, ...next.rooms])];
       state = next;
       ui.tab = "schedule";
@@ -626,7 +658,7 @@ $("file").onchange = async (e) => {
       );
     else
       notify(
-        `Загружено: ${scopeName()} — ${mine.length} занятий, ${new Set(mine.flatMap((l) => l.groups)).size} групп. Замечаний по файлу: ${data.issues.length}`,
+        `Загружено: ${scopeName()} — ${mine.length} ${plural(mine.length, "пара", "пары", "пар")}, ${new Set(mine.flatMap((l) => l.groups)).size} групп${myIssues().length ? ". Проверьте замечания: " + myIssues().length : ""}`,
       );
   } catch (e) {
     notify("Не удалось загрузить: " + e.message);
@@ -703,7 +735,7 @@ function printTable(lessons) {
       a.groups.join().localeCompare(b.groups.join(), "ru") ||
       a.subgroup - b.subgroup,
   );
-  return `<div class="print-table"><table><thead><tr><th>Дата / день</th><th>Пара / время</th><th>Группа</th><th>Дисциплина</th><th>Преподаватель</th><th>Аудитория</th><th>Отметки</th></tr></thead><tbody>${rows.map((l) => `<tr><td>${esc(l.date)}<br>${new Date(l.date + "T12:00:00").toLocaleDateString("ru", { weekday: "short" })}</td><td>${l.period ?? "До первой"}<br>${esc(time(l))}</td><td>${esc(l.groups.join(", "))}${l.subgroup ? "<br>" + l.subgroup + " подгр." : ""}</td><td>${esc(l.subject)}</td><td>${esc(l.teacher || "Не указан")}</td><td>${esc(l.room || "Не указана")}</td><td>${Model.changed(l, state.baseline) ? "Изменено. " : ""}${esc([...new Set(analysis.filter((c) => c.ids.includes(l.id)).flatMap((c) => c.types))].join(", "))}</td></tr>`).join("")}</tbody></table></div>`;
+  return `<div class="print-table"><table><thead><tr><th>Дата / день</th><th>Пара / время</th><th>Группа</th><th>Дисциплина</th><th>Преподаватель</th><th>Аудитория</th><th>Отметки</th></tr></thead><tbody>${rows.map((l) => `<tr><td>${esc(dm(l.date))}<br>${new Date(l.date + "T12:00:00").toLocaleDateString("ru", { weekday: "short" })}</td><td>${l.period ?? "До первой"}<br>${esc(time(l))}</td><td>${esc(l.groups.join(", "))}${l.subgroup ? "<br>" + l.subgroup + " подгр." : ""}</td><td>${esc(l.subject)}</td><td>${esc(l.teacher || "Не указан")}</td><td>${esc(l.room || "Не указана")}</td><td>${Model.changed(l, state.baseline) ? "Изменено. " : ""}${esc([...new Set(analysis.filter((c) => c.ids.includes(l.id)).flatMap((c) => c.types))].join(", "))}</td></tr>`).join("")}</tbody></table></div>`;
 }
 
 function exchange(a, b) {

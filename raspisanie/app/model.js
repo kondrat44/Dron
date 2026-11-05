@@ -69,6 +69,28 @@ window.Model = (() => {
       return "";
     }
   }
+  /* Специальности Дорожного отделения по окончанию шифра группы. */
+  const SPECIALTIES = [
+    [/-БС$/u, "Эксплуатация беспилотных авиационных систем"],
+    [/-Д$/u, "Строительство и эксплуатация автомобильных дорог, аэродромов и городских путей сообщения"],
+  ];
+  /* Заполняет пустые поля справочника; то, что вписано вручную, не трогает. */
+  function fillCatalog(catalog, groups, settings) {
+    const s = withDefaults(settings);
+    let re = null;
+    try {
+      re = s.scopePattern ? new RegExp(s.scopePattern, "u") : null;
+    } catch {}
+    const out = { ...(catalog || {}) };
+    for (const g of groups) {
+      const c = { specialty: "", department: "", ...(out[g] || {}) };
+      if (!c.department && ((re && re.test(g)) || (window.ROAD_GROUPS || []).includes(g)))
+        c.department = s.scopeName;
+      if (!c.specialty) c.specialty = (SPECIALTIES.find(([r]) => r.test(g)) || [])[1] || "";
+      out[g] = c;
+    }
+    return out;
+  }
   function initial(data) {
     const lessons = copy(data.lessons);
     return {
@@ -80,17 +102,7 @@ window.Model = (() => {
       source: data.source || "Тестовая неделя",
       settings: copy(defaults),
       departments: copy(departments),
-      catalog: Object.fromEntries(
-        [...new Set(lessons.flatMap((l) => l.groups))].map((g) => [
-          g,
-          {
-            specialty: "",
-            department: (window.ROAD_GROUPS || []).includes(g)
-              ? "Дорожное отделение"
-              : "",
-          },
-        ]),
-      ),
+      catalog: fillCatalog({}, [...new Set(lessons.flatMap((l) => l.groups))], defaults),
       rooms: [...new Set(lessons.map((l) => l.room).filter(Boolean))],
     };
   }
@@ -201,6 +213,7 @@ window.Model = (() => {
     defaults,
     withDefaults,
     inScope,
+    fillCatalog,
     departments,
     building,
     initial,
