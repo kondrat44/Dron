@@ -59,7 +59,7 @@
   var KIND = { single: 'Один ответ', multi: 'Несколько ответов', match: 'Соответствие', order: 'Последовательность' };
 
   /* ================= Хранилище ================= */
-  function defaultSettings() { return { theme: 'system', shuffle: true, extra: true, font: 'normal' }; }
+  function defaultSettings() { return { theme: 'system', shuffle: true, extra: true, font: 'normal', autoNext: false }; }
   function defaultState() {
     return {
       stats: {},        // id -> { a: попыток, c: верных, last: 1/0 }
@@ -435,6 +435,7 @@
       '<div class="card"><b>Размер шрифта</b>' + seg('font', [['normal', 'Обычный'], ['large', 'Крупный']]) + '</div>' +
       '<div class="card">' +
       sw('shuffle', 'Перемешивать варианты', 'Варианты ответа в новом порядке при каждом показе') +
+      sw('autoNext', 'Автопереход при верном ответе', 'После правильного ответа сразу открывается следующий вопрос') +
       sw('extra', 'Дополнительные вопросы за ошибки', 'В экзамене: +5 вопросов и +5 минут за каждую ошибку') +
       '</div>' +
       '<p class="muted small" style="text-align:center">В базе ' + Q.length + ' вопросов. Прогресс хранится только на этом устройстве.</p>';
@@ -542,8 +543,38 @@
     if (!ok) vibrate();
     if (s.mode === 'marathon' && S.marathon) { S.marathon.answers = s.answers; save(); }
     renderQuiz(false);
+    if (ok && S.settings.autoNext) {
+      /* автопереход: короткая пауза, чтобы был виден зелёный ответ */
+      setTimeout(function () {
+        if (session !== s || s.finished || s.cur !== pos || route.name !== 'quiz') return;
+        ACT.next();
+      }, 900);
+      return;
+    }
+    scrollToFeedback(!ok);
+  }
+
+  /* Прокрутка к правильному ответу и пояснению */
+  function scrollToFeedback(wrong) {
     var ex = document.querySelector('.explain');
-    if (ex && ex.scrollIntoView) ex.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    if (!ex) return;
+    var target = ex;
+    if (wrong) {
+      var cards = document.querySelectorAll('#qwrap > .card');
+      if (cards.length) target = cards[0]; /* соответствие / последовательность: сначала разбор ответа */
+    }
+    var bar = document.querySelector('.topbar');
+    var off = (bar ? bar.offsetHeight : 56) + 12;
+    var top = target.getBoundingClientRect().top + window.pageYOffset - off;
+    if (!wrong) {
+      var btn = document.querySelector('[data-act="next"]');
+      var bottom = btn ? btn.getBoundingClientRect().bottom + window.pageYOffset + 16 : 0;
+      if (bottom <= window.pageYOffset + window.innerHeight) return; /* всё и так видно */
+      top = Math.min(top, bottom - window.innerHeight);
+    }
+    setTimeout(function () {
+      try { window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' }); } catch (e) { window.scrollTo(0, Math.max(0, top)); }
+    }, 60);
   }
 
   /* ---------- Экран вопроса ---------- */
