@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self' file:; script-src 'self' file:; style-src 'self' 'unsafe-inline' file:; img-src 'self' data: blob:; connect-src 'none'; font-src 'self' file:; object-src 'none'"
+    />
+    <title>Расписание КузТАГиС</title>
+    <link rel="stylesheet" href="app/style.css" />
+    <link rel="stylesheet" href="app/viewer.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <div class="bar-in">
+        <div class="bar-row">
+          <div class="logo">
+            <b>Расписание</b><span>КузТАГиС · Дорожное отделение</span>
+          </div>
+          <div class="actions">
+            <button class="btn" id="undo">Отменить</button
+            ><button class="btn" id="export">Excel</button
+            ><button class="btn" id="print">Печать / PDF</button
+            ><button class="btn blue" id="import">Загрузить файл</button>
+          </div>
+        </div>
+        <nav class="nav">
+          <div class="seg">
+            <button data-tab="schedule">Расписание</button
+            ><button data-tab="refs">Справочник</button
+            ><button data-tab="settings">Настройки</button
+            ><button data-tab="help">Инструкция</button>
+          </div>
+        </nav>
+      </div>
+    </header>
+    <main class="wrap" id="main"></main>
+    <input type="file" id="file" accept=".xlsx,.csv" hidden />
+    <div class="scrim" id="scrim" hidden>
+      <div
+        class="sheet"
+        id="sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Редактирование пары"
+      ></div>
+    </div>
+    <div id="message" role="status"></div>
+    <script src="vendor/xlsx.full.min.js"></script>
+    <script src="app/xlsx-compat.js"></script>
+    <script src="vendor/exceljs.min.js"></script>
+    <script src="data/reference.js"></script>
+    <script src="app/model.js"></script>
+    <script src="app/reader.js"></script>
+    <script src="app/xlsx-patch.js"></script>
+    <script src="app/export.js"></script>
+    <script src="app/motion.js"></script><script src="app/ui.js"></script>
+  </body>
+</html>
