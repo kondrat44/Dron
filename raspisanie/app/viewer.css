@@ -363,3 +363,7 @@ ul.changes li{margin:6px 0}
 .room-grid td.busy{background:#fdecec;font-weight:600}
 .room-grid td.free{color:#2e7d32}
 td.warn-t{color:#b25000;font-weight:600}
+.fix-box p{margin:8px 0 6px}
+.fix-box .chips{display:flex;flex-wrap:wrap;gap:6px}
+.fix-box .chip{cursor:pointer}
+.tag.note{background:#eef4ff;color:#1d4ed8;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

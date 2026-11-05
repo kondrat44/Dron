@@ -199,5 +199,58 @@ window.Tools = (() => {
     return out.sort((a, b) => b.pairs - a.pairs || a.t.localeCompare(b.t, "ru"));
   }
 
-  return { afterLoad, notesHtml, sig, unsaved, dayFilter, candidates, changes, revert, load, DAY, dayOf };
+  /* ---------- Перенос на свободное место и подсказки по конфликтам ---------- */
+  function periodsFor(st, date, group) {
+    const slot = st.layout && st.layout[date + "|" + group];
+    if (slot) return Object.keys(slot.rows).filter((k) => k !== "before").map(Number).sort((a, b) => a - b);
+    const set = Model.withDefaults(st.settings);
+    const d = dayOf(date);
+    const n = (set.bells[d === 1 ? "mon" : d === 6 ? "sat" : "wk"] || []).length || 5;
+    return [...Array(n).keys()].map((i) => i + 1);
+  }
+  const sameGroup = (x, l) =>
+    x.groups.some((g) => l.groups.includes(g)) && (!x.subgroup || !l.subgroup || x.subgroup === l.subgroup);
+  function freeRooms(st, probe, prefer) {
+    const set = Model.withDefaults(st.settings);
+    const shared = new Set(set.sharedRooms.map(people));
+    const rooms = [...new Set([...(st.rooms || []), ...st.lessons.map((x) => x.room)])].filter(
+      (r) => r && !shared.has(people(r)),
+    );
+    return rooms
+      .filter((r) => !st.lessons.some((x) => x.id !== probe.id && x.room === r && Model.overlaps(x, probe, st.settings)))
+      .sort(
+        (a, b) =>
+          Number(Model.building(b, st.settings) === prefer) - Number(Model.building(a, st.settings) === prefer) ||
+          a.localeCompare(b, "ru", { numeric: true }),
+      );
+  }
+  function freeSlots(st, l) {
+    const set = Model.withDefaults(st.settings);
+    const shared = new Set(set.sharedRooms.map(people));
+    const dates = [...new Set([...(st.dates || []), ...st.lessons.map((x) => x.date)])].sort();
+    const out = [];
+    for (const date of dates) {
+      if (dayOf(date) === 0) continue;
+      for (const period of periodsFor(st, date, l.groups[0])) {
+        if (date === l.date && period === l.period) continue;
+        const probe = { ...l, date, period, start: "", end: "" };
+        const others = st.lessons.filter((x) => x.id !== l.id && Model.overlaps(x, probe, st.settings));
+        if (others.some((x) => sameGroup(x, l))) continue;
+        if (l.teacher && others.some((x) => people(x.teacher) === people(l.teacher))) continue;
+        const roomBusy = !!l.room && !shared.has(people(l.room)) && others.some((x) => x.room === l.room);
+        const alt = roomBusy ? freeRooms(st, probe, Model.building(l.room, st.settings))[0] || "" : "";
+        if (roomBusy && !alt) continue;
+        out.push({ date, period, roomBusy, alt });
+      }
+    }
+    return out.sort(
+      (a, b) =>
+        Number(a.roomBusy) - Number(b.roomBusy) ||
+        Number(b.date === l.date) - Number(a.date === l.date) ||
+        a.date.localeCompare(b.date) ||
+        a.period - b.period,
+    );
+  }
+
+  return { freeSlots, freeRooms, afterLoad, notesHtml, sig, unsaved, dayFilter, candidates, changes, revert, load, DAY, dayOf };
 })();

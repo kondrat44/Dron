@@ -259,7 +259,7 @@ function card(l) {
       x.subgroup === l.subgroup &&
       x.groups.join() === l.groups.join(),
   );
-  return `<button class="les ${conflicts.length ? "bad" : ""} ${ui.moving === l.id ? "selected" : ""}" style="--h:211" data-lesson="${esc(l.id)}"><span class="s">${esc(l.subject)}</span><span class="m">${esc(l.groups.join(", "))}${l.subgroup ? " · " + l.subgroup + " подгр." : ""}</span>${l.teacher || l.period !== null ? `<span class="m">${esc(l.teacher || "Преподаватель не указан")}</span>` : ""}<span class="m">${esc(l.room ? "Ауд. " + l.room : "Кабинет не указан")}${Model.building(l.room, state.settings) ? " · корпус " + Model.building(l.room, state.settings) : ""}</span><span class="tags">${Model.changed(l, state.baseline) ? '<span class="tag mv">Изменено</span>' : ""}${same ? '<span class="tag db">Сдвоенная пара</span>' : ""}${conflicts.length ? `<span class="tag bd">${esc([...new Set(conflicts.flatMap((c) => c.types))].join(", "))}</span>` : ""}</span></button>`;
+  return `<button class="les ${conflicts.length ? "bad" : ""} ${ui.moving === l.id ? "selected" : ""}" style="--h:211" data-lesson="${esc(l.id)}"><span class="s">${esc(l.subject)}</span><span class="m">${esc(l.groups.join(", "))}${l.subgroup ? " · " + l.subgroup + " подгр." : ""}</span>${l.teacher || l.period !== null ? `<span class="m">${esc(l.teacher || "Преподаватель не указан")}</span>` : ""}<span class="m">${esc(l.room ? "Ауд. " + l.room : "Кабинет не указан")}${Model.building(l.room, state.settings) ? " · корпус " + Model.building(l.room, state.settings) : ""}</span><span class="tags">${Model.changed(l, state.baseline) ? '<span class="tag mv">Изменено</span>' : ""}${(state.notes || {})[l.id] ? `<span class="tag note" title="${esc(state.notes[l.id])}">💬 ${esc(state.notes[l.id].length > 40 ? state.notes[l.id].slice(0, 40) + "…" : state.notes[l.id])}</span>` : ""}${same ? '<span class="tag db">Сдвоенная пара</span>' : ""}${conflicts.length ? `<span class="tag bd">${esc([...new Set(conflicts.flatMap((c) => c.types))].join(", "))}</span>` : ""}</span></button>`;
 }
 function render() {
   const oldBad = new Set(
@@ -531,9 +531,37 @@ function editor(id) {
       .map((t) => `<option value="${esc(t)}">${esc(Model.roomInfo(t)?.name || "")}</option>`)
       .join(
         "",
-      )}</datalist><p class="hint">Было в файле: ${esc(old?.teacher || "преподаватель не указан")}, ауд. ${esc(old?.room || "не указана")}, ${esc(dm(old?.date))}, ${esc(pairName(old?.period))}</p><p id="edit-conflicts" role="status"></p><div class="actions"><button class="btn blue" id="edit-save">Сохранить</button><button class="btn" id="edit-swap">Обменять с другой парой</button><button class="btn" id="edit-close">Закрыть</button></div>`;
+      )}</datalist><label class="field">Комментарий<input class="inp" id="edit-note" maxlength="200" placeholder="например, замена из-за болезни" value="${esc((state.notes || {})[id] || "")}"></label><p class="hint">Было в файле: ${esc(old?.teacher || "преподаватель не указан")}, ауд. ${esc(old?.room || "не указана")}, ${esc(dm(old?.date))}, ${esc(pairName(old?.period))}</p><p id="edit-conflicts" role="status"></p><div id="fix-box" class="fix-box"></div><div id="move-box" class="fix-box" hidden></div><div class="actions"><button class="btn blue" id="edit-save">Сохранить</button>${l.period === null ? "" : '<button class="btn" id="edit-move">Перенести на свободное место</button>'}<button class="btn" id="edit-swap">Обменять с другой парой</button><button class="btn" id="edit-close">Закрыть</button></div>`;
   $("scrim").hidden = false;
   requestAnimationFrame(() => $("scrim").classList.add("open"));
+  const slotText = (x) =>
+    `${Tools.DAY[Tools.dayOf(x.date)]} ${dm(x.date)}, ${x.period} пара${x.roomBusy ? " · ауд. " + x.alt : ""}`;
+  const typed = () => ({
+    teacher: $("edit-teacher").value.trim(),
+    room: $("edit-room").value.trim(),
+    note: $("edit-note").value.trim(),
+  });
+  const apply = (v, slot) => {
+    l.teacher = v.teacher;
+    l.room = slot?.alt || v.room;
+    if (l.room && !state.rooms.includes(l.room)) state.rooms.push(l.room);
+    if (slot) {
+      l.date = slot.date;
+      l.period = slot.period;
+      l.start = l.end = "";
+    }
+    state.notes = state.notes || {};
+    if (v.note) state.notes[id] = v.note;
+    else delete state.notes[id];
+  };
+  const moveTo = (slot) => {
+    const v = typed();
+    close();
+    commit(() => apply(v, slot));
+    notify("Пара перенесена: " + slotText(slot));
+  };
+  const bindSlots = (box, slots) =>
+    box.querySelectorAll(".fix-slot").forEach((b) => (b.onclick = () => moveTo(slots[Number(b.dataset.i)])));
   const preview = () => {
     const ls = Model.copy(state.lessons),
       target = ls.find((x) => x.id === id);
@@ -566,20 +594,59 @@ function editor(id) {
         [...new Set(conflicts.flatMap((x) => x.types))].join(", ") +
         ". После сохранения будут подсвечены."
       : "Конфликтов у этой пары нет.";
+    /* «Как исправить»: свободные кабинеты в это время или свободное время для пары */
+    const types = new Set(conflicts.flatMap((x) => x.types));
+    let fix = "";
+    if (types.has("Кабинет")) {
+      const rooms = Tools.freeRooms({ ...state, lessons: ls }, target, Model.building(target.room, state.settings)).slice(0, 6);
+      fix += rooms.length
+        ? `<p><b>Как исправить:</b> свободные в это время кабинеты</p><div class="chips">${rooms
+            .map((r) => `<button class="chip fix-room" data-room="${esc(r)}" title="${esc(Model.roomInfo(r)?.name || "")}">${esc(r)}</button>`)
+            .join("")}</div>`
+        : "<p><b>Как исправить:</b> свободных кабинетов в это время нет.</p>";
+    }
+    let slots = [];
+    if ((types.has("Группа") || types.has("Преподаватель")) && target.period !== null) {
+      slots = Tools.freeSlots({ ...state, lessons: ls }, target).slice(0, 4);
+      fix += slots.length
+        ? `<p><b>Как исправить:</b> перенести на свободное время</p><div class="chips">${slots
+            .map((x, i) => `<button class="chip fix-slot" data-i="${i}">${esc(slotText(x))}</button>`)
+            .join("")}</div>`
+        : "<p><b>Как исправить:</b> свободного времени для этой пары на неделе нет.</p>";
+    }
+    $("fix-box").innerHTML = fix;
+    $("fix-box").querySelectorAll(".fix-room").forEach(
+      (b) =>
+        (b.onclick = () => {
+          $("edit-room").value = b.dataset.room;
+          preview();
+        }),
+    );
+    bindSlots($("fix-box"), slots);
   };
   $("edit-room").oninput = preview;
   $("edit-teacher").oninput = preview;
   preview();
   $("edit-save").onclick = () => {
-    const teacher = $("edit-teacher").value.trim(),
-      room = $("edit-room").value.trim();
+    const v = typed();
     close();
-    commit(() => {
-      l.teacher = teacher;
-      l.room = room;
-      if (room && !state.rooms.includes(room)) state.rooms.push(room);
-    });
+    commit(() => apply(v));
   };
+  if ($("edit-move"))
+    $("edit-move").onclick = () => {
+      const v = typed();
+      const probe = { ...l, teacher: v.teacher, room: v.room };
+      const slots = Tools.freeSlots({ ...state, lessons: state.lessons.map((x) => (x.id === id ? probe : x)) }, probe).slice(0, 15);
+      const box = $("move-box");
+      box.hidden = false;
+      box.innerHTML = slots.length
+        ? `<p><b>Свободное время для пары</b> (группа, преподаватель и кабинет свободны; если кабинет занят, предложен другой):</p><div class="chips">${slots
+            .map((x, i) => `<button class="chip fix-slot" data-i="${i}">${esc(slotText(x))}</button>`)
+            .join("")}</div>`
+        : "<p>Свободного времени для этой пары на неделе нет.</p>";
+      bindSlots(box, slots);
+      box.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    };
   $("edit-swap").onclick = () => {
     close();
     ui.moving = id;
@@ -740,7 +807,7 @@ function settings() {
 }
 function help() {
   $("main").innerHTML =
-    `<section class="view"><h2 class="ttl">Как пользоваться</h2><div class="card"><ol class="steps"><li><b>Загрузите файл.</b> Нажмите «Загрузить файл» и выберите Excel недели (.xlsx), который выдаёт программа учебной части. Программа сама найдёт группы ${esc(scopeName())}.</li><li><b>Найдите нужное.</b> Начните вводить группу, фамилию или кабинет в строку поиска и нажмите подсказку. Можно выбрать группу, преподавателя, кабинет, корпус или день в списках. «Сбросить фильтры» — снова всё расписание.</li><li><b>Поправьте пару.</b> Нажмите на пару, чтобы сменить преподавателя или кабинет. Чтобы поменять две пары местами, нажмите «Обменять с другой парой», затем вторую пару, или просто перетащите одну пару на другую.</li><li><b>Следите за красным.</b> Красным выделены конфликты: группа, преподаватель или кабинет в двух местах одновременно. Ошибочную правку отмените кнопкой «Отменить».</li><li><b>Скачайте Excel.</b> Кнопка «Excel» скачивает тот же файл, что вы загрузили: те же листы и оформление, изменены только поправленные пары. В имени файла будет «(изменено)». Если после правок есть конфликты или что-то не помещается в файл, программа покажет список и спросит «Вы уверены?» — скачать можно всё равно.</li><li><b>Сервис.</b> На вкладке «Сервис»: замена заболевшего преподавателя (программа сама покажет, кто свободен), список всех правок с кнопкой «Вернуть», занятость любого кабинета на неделю и нагрузка преподавателей.</li><li><b>Сегодня и завтра.</b> Кнопки над фильтрами сразу показывают нужный день.</li><li><b>Печать.</b> Выберите группу, преподавателя или кабинет и нажмите «Печать / PDF». В окне печати выберите А4 или «Сохранить как PDF».</li></ol><p class="hint">Файл никуда не отправляется: всё работает в браузере на этом компьютере. Если вкладку закрыли, при следующем открытии нажмите «Продолжить». Галочка «Работа со всеми отделениями» — бета-тестирование для остальных отделений.</p></div></section>`;
+    `<section class="view"><h2 class="ttl">Как пользоваться</h2><div class="card"><ol class="steps"><li><b>Загрузите файл.</b> Нажмите «Загрузить файл» и выберите Excel недели (.xlsx), который выдаёт программа учебной части. Программа сама найдёт группы ${esc(scopeName())}.</li><li><b>Найдите нужное.</b> Начните вводить группу, фамилию или кабинет в строку поиска и нажмите подсказку. Можно выбрать группу, преподавателя, кабинет, корпус или день в списках. «Сбросить фильтры» — снова всё расписание.</li><li><b>Поправьте пару.</b> Нажмите на пару, чтобы сменить преподавателя или кабинет. Чтобы поменять две пары местами, нажмите «Обменять с другой парой», затем вторую пару, или просто перетащите одну пару на другую.</li><li><b>Перенесите на свободное место.</b> В окне пары кнопка «Перенести на свободное место» покажет время, когда свободны и группа, и преподаватель, и кабинет. Если у пары конфликт, там же появится «Как исправить»: свободные кабинеты или свободное время. В поле «Комментарий» можно написать причину правки — она видна на карточке и в «Сервисе».</li><li><b>Следите за красным.</b> Красным выделены конфликты: группа, преподаватель или кабинет в двух местах одновременно. Ошибочную правку отмените кнопкой «Отменить».</li><li><b>Скачайте Excel.</b> Кнопка «Excel» скачивает тот же файл, что вы загрузили: те же листы и оформление, изменены только поправленные пары. В имени файла будет «(изменено)». Если после правок есть конфликты или что-то не помещается в файл, программа покажет список и спросит «Вы уверены?» — скачать можно всё равно.</li><li><b>Сервис.</b> На вкладке «Сервис»: замена заболевшего преподавателя (программа сама покажет, кто свободен), список всех правок с кнопкой «Вернуть», занятость любого кабинета на неделю и нагрузка преподавателей.</li><li><b>Сегодня и завтра.</b> Кнопки над фильтрами сразу показывают нужный день.</li><li><b>Печать.</b> Выберите группу, преподавателя или кабинет и нажмите «Печать / PDF». В окне печати выберите А4 или «Сохранить как PDF».</li></ol><p class="hint">Файл никуда не отправляется: всё работает в браузере на этом компьютере. Если вкладку закрыли, при следующем открытии нажмите «Продолжить». Галочка «Работа со всеми отделениями» — бета-тестирование для остальных отделений.</p></div></section>`;
 }
 $("import").onclick = () => $("file").click();
 $("file").onchange = async (e) => {
@@ -755,6 +822,8 @@ $("file").onchange = async (e) => {
       throw Error("Не найдено занятий. Проверьте формат и дату листов.");
     commit(() => {
       const next = Model.initial(data);
+      next.layout = data.layout || null;
+      next.notes = {};
       next.settings = state.settings;
       next.departments = state.departments;
       const keep = Object.fromEntries(
@@ -983,7 +1052,9 @@ function tools() {
   }
 
   /* правки */
+  const notes = state.notes || {};
   const ch = Tools.changes(state).filter((x) => scope(x.l));
+  const noted = state.lessons.filter((l) => notes[l.id] && scope(l) && !ch.some((x) => x.l.id === l.id));
   const fmt = (x) =>
     `${dm(x.date)}, ${pairName(x.period)}: ${x.subject} (${x.teacher || "без преподавателя"}, ауд. ${x.room || "?"})`;
 
@@ -1025,11 +1096,11 @@ function tools() {
       ? `<p class="hint">Всё, что изменено по сравнению с загруженным файлом. «Вернуть» возвращает пару как было; у обмена возвращаются обе пары.</p><ul class="changes">${ch
           .map(
             (x) =>
-              `<li><b>${esc(x.l.groups.join(", "))}</b>: <s>${esc(fmt(x.b))}</s> → ${esc(fmt(x.l))} <button class="btn small revert" data-id="${esc(x.l.id)}">Вернуть</button></li>`,
+              `<li><b>${esc(x.l.groups.join(", "))}</b>: <s>${esc(fmt(x.b))}</s> → ${esc(fmt(x.l))} <button class="btn small revert" data-id="${esc(x.l.id)}">Вернуть</button>${notes[x.l.id] ? `<br><span class="hint">💬 ${esc(notes[x.l.id])}</span>` : ""}</li>`,
           )
           .join("")}</ul>`
       : '<p class="hint">Правок пока нет.</p>'
-  }</div>
+  }${noted.length ? `<p><b>Комментарии без правок</b></p><ul class="changes">${noted.map((l) => `<li><b>${esc(l.groups.join(", "))}</b>: ${esc(fmt(l))}<br><span class="hint">💬 ${esc(notes[l.id])}</span></li>`).join("")}</ul>` : ""}</div>
   <div class="card"><h3>Занятость кабинета на неделю</h3><label class="filter">Кабинет<select class="inp" id="room-pick"><option value="">Выберите</option>${rooms
     .map((r) => opt(r, s.room, r + (Model.roomInfo(r) ? " — " + Model.roomInfo(r).name : "")))
     .join("")}</select></label>${grid}</div>
