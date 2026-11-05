@@ -1,6 +1,6 @@
 /* Service worker «БАС Тест»: кеширует файлы, чтобы приложение работало без интернета.
    После изменения любых файлов увеличьте версию: bas-test-v2, bas-test-v3 … */
-const CACHE = "bas-test-v2";
+const CACHE = "bas-test-v3";
 const ASSETS = [
   "./",
   "./index.html",

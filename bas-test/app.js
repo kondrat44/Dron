@@ -19,7 +19,7 @@
     { key: 'open', title: 'Бывшие письменные', sub: 'Термины и определения', test: function (q) { return q.source === 'open-short' || q.source === 'open-long'; } },
     { key: 'choice', title: 'Выбор ответа', sub: 'Один или несколько вариантов', test: function (q) { return q.source === 'choice'; } }
   ];
-  var PAIR_COLORS = ['#1E6FFF', '#8B5CF6', '#F08A24', '#0EA5A4', '#E5484D', '#22A55B'];
+  var PAIR_COLORS = ['#2563EB', '#7C3AED', '#C2410C', '#0F766E', '#BE123C', '#15803D'];
   var LETTERS = 'АБВГДЕЖЗ';
   var EXAM_SIZE = 20;
   var EXAM_MINUTES = 20;
@@ -262,9 +262,9 @@
   }
 
   function tile(act, to, icon, title, sub, cls, cnt) {
-    return '<button class="tile ' + (cls || '') + '" data-act="' + act + '" data-to="' + to + '"><span class="ti">' + icon + '</span>' +
-      (cnt ? '<em class="cnt">' + cnt + '</em>' : '') + '<div><b>' + title + '</b><span>' + sub + '</span></div>' +
-      (cls && cls.indexOf('wide') >= 0 ? I.chevron.replace('<svg', '<svg width="20" height="20" style="color:var(--muted);flex:none"') : '') + '</button>';
+    return '<button class="row" data-act="' + act + '" data-to="' + to + '"><span class="ri">' + icon + '</span>' +
+      '<div class="grow"><b>' + title + '</b><span>' + sub + '</span></div>' +
+      (cnt ? '<em class="cnt">' + cnt + '</em>' : '') + I.chevron + '</button>';
   }
   function firstTicketToDo() {
     for (var i = 1; i <= TICKET_COUNT; i++) { var r = S.tickets[i]; if (!r || r.errors) return i; }
@@ -286,18 +286,16 @@
       cta = t ? ['ticket', t, 'Решать билет ' + t, S.tickets[t] ? 'Исправить ошибки в билете' : '12 вопросов с пояснениями']
               : ['examStart', '', 'Пройти экзамен', 'Все билеты решены без ошибок'];
     }
-    return '<section class="hero">' + DRONE +
-      '<div class="hero-top"><div class="grow"><div class="eyebrow">25.02.08 · Диагностическая работа</div><h1>БАС Тест</h1></div>' +
-      '<button class="icon-btn" data-act="nav" data-to="settings" aria-label="Настройки">' + I.gear + '</button></div>' +
-      '<div class="hero-stats">' + ring(Math.round(studied / Q.length * 100)) +
-      '<div><div class="big">Изучено ' + studied + ' из ' + Q.length + '</div>' +
-      '<div class="row"><span class="pill">Верных ' + pct + '%</span><span class="pill">Ответов ' + S.totalAnswers + '</span></div></div></div>' +
-      '<button class="hero-cta" data-act="' + cta[0] + '" data-n="' + cta[1] + '"><span class="ci">' + I.play + '</span>' +
-      '<div class="grow"><b>' + cta[2] + '</b><span>' + cta[3] + '</span></div>' + I.chevron + '</button>' +
-      '</section>' +
+    var sPct = Math.round(studied / Q.length * 100);
+    return '<header class="home-head"><div class="grow"><p class="eyebrow">25.02.08 · Диагностическая работа</p><h1>БАС Тест</h1></div>' +
+      '<button class="icon-btn" data-act="nav" data-to="settings" aria-label="Настройки">' + I.gear + '</button></header>' +
+      '<div class="overview"><div class="ov-num"><b>' + studied + '</b><span>из ' + Q.length + ' изучено</span></div>' +
+      '<div class="bar"><i style="width:' + sPct + '%"></i></div>' +
+      '<div class="ov-meta"><span>Верных ответов <b>' + pct + '%</b></span><span>Всего ответов <b>' + S.totalAnswers + '</b></span></div></div>' +
+      '<button class="btn cta" data-act="' + cta[0] + '" data-n="' + cta[1] + '"><span>' + cta[2] + '</span><small>' + cta[3] + '</small></button>' +
       installBanner() +
       '<div class="section-title">Режимы</div>' +
-      '<div class="tiles">' +
+      '<div class="menu">' +
       tile('nav', 'tickets', I.tickets, 'Билеты', TICKET_COUNT + ' билетов по 12 вопросов', 'c-blue') +
       tile('nav', 'examIntro', I.exam, 'Экзамен', EXAM_SIZE + ' вопросов, ' + EXAM_MINUTES + ' минут', 'c-violet') +
       tile('nav', 'topics', I.topics, 'Темы', 'По дисциплинам, ПК и типам', 'c-teal') +
@@ -448,11 +446,11 @@
     return head('Экзамен') +
       '<div class="card"><div class="info"><span class="ii">' + I.exam + '</span><div><b style="font-size:calc(18px*var(--fs))">' + EXAM_SIZE + ' случайных вопросов</b><div class="muted small">Как на диагностической работе</div></div></div>' +
       '<ul class="rules">' +
-      '<li><b>⏱</b><span>На решение ' + EXAM_MINUTES + ' минут</span></li>' +
-      '<li><b>🧩</b><span>Обязательно будут соответствие, последовательность и бывшие письменные вопросы</span></li>' +
-      '<li><b>🙈</b><span>Правильность ответов видна только в конце, изменить ответ нельзя</span></li>' +
-      '<li><b>❌</b><span>Больше двух ошибок — экзамен не сдан</span></li>' +
-      (S.settings.extra ? '<li><b>➕</b><span>За каждую ошибку +5 вопросов и +5 минут, в них ошибаться нельзя</span></li>' : '') +
+      '<li><b>1</b><span>На решение ' + EXAM_MINUTES + ' минут</span></li>' +
+      '<li><b>2</b><span>Обязательно будут соответствие, последовательность и бывшие письменные вопросы</span></li>' +
+      '<li><b>3</b><span>Правильность ответов видна только в конце, изменить ответ нельзя</span></li>' +
+      '<li><b>4</b><span>Больше двух ошибок — экзамен не сдан</span></li>' +
+      (S.settings.extra ? '<li><b>5</b><span>За каждую ошибку +5 вопросов и +5 минут, в них ошибаться нельзя</span></li>' : '') +
       '</ul>' +
       '<button class="btn" data-act="examStart">Начать экзамен</button></div>' +
       (last.length ? '<div class="section-title">Последние попытки</div>' + last.map(function (e) {
