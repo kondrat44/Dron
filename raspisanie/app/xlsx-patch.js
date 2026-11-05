@@ -128,13 +128,20 @@ window.XlsxPatch = (() => {
 
   class Sheet {
     constructor(xml) {
+      this.xml = xml;
+      this.dirtyRows = new Set();
+      this.mergesDirty = false;
       this.decl = (/^<\?xml[^>]*\?>/.exec(xml) || [""])[0];
       this.doc = new DOMParser().parseFromString(xml, "application/xml");
       if (this.doc.getElementsByTagNameNS("*", "parsererror").length) throw Error("Не удалось разобрать лист Excel");
       this.ns = this.doc.documentElement.namespaceURI;
       this.data = this.doc.getElementsByTagNameNS(this.ns, "sheetData")[0];
       this.rows = new Map();
-      for (const row of this.data.children) this.rows.set(Number(row.getAttribute("r")), row);
+      this.orig = new Map();
+      for (const row of this.data.children) {
+        this.rows.set(Number(row.getAttribute("r")), row);
+        this.orig.set(Number(row.getAttribute("r")), new XMLSerializer().serializeToString(row));
+      }
       this.dirty = false;
     }
     el(name) {
@@ -166,16 +173,20 @@ window.XlsxPatch = (() => {
       cell.setAttribute("r", a);
       row.insertBefore(cell, before);
       row.removeAttribute("spans");
+      this.dirtyRows.add(r);
       return cell;
     }
     clearValue(cell) {
+      if (!cell.children.length && !cell.hasAttribute("t")) return;
       for (const k of [...cell.children]) cell.removeChild(k);
       cell.removeAttribute("t");
+      this.dirtyRows.add(parseAddr(cell.getAttribute("r")).r);
     }
     setValue(r, c, v) {
       const cell = this.cell(r, c, true);
       this.clearValue(cell);
       v = String(v ?? "").trim();
+      this.dirtyRows.add(r);
       if (v !== "") {
         if (/^\d{1,9}$/.test(v)) {
           const x = this.el("v");
@@ -229,7 +240,10 @@ window.XlsxPatch = (() => {
           if (x) this.clearValue(x);
         }
       for (const m of this.merges())
-        if (m.r1 < r + h && m.r2 >= r && m.c1 < c + w && m.c2 >= c) m.node.parentNode.removeChild(m.node);
+        if (m.r1 < r + h && m.r2 >= r && m.c1 < c + w && m.c2 >= c) {
+          m.node.parentNode.removeChild(m.node);
+          this.mergesDirty = true;
+        }
       this.dirty = true;
     }
     paste(piece, r, c) {
@@ -238,6 +252,8 @@ window.XlsxPatch = (() => {
         const target = this.cell(r + i, c + j, true),
           copy = node.cloneNode(true);
         copy.setAttribute("r", addr(r + i, c + j));
+        if (new XMLSerializer().serializeToString(copy) !== new XMLSerializer().serializeToString(target))
+          this.dirtyRows.add(r + i);
         target.parentNode.replaceChild(copy, target);
       }
       if (piece.merges.length) {
@@ -246,18 +262,74 @@ window.XlsxPatch = (() => {
           const x = this.el("mergeCell");
           x.setAttribute("ref", addr(r + m.r1, c + m.c1) + ":" + addr(r + m.r2, c + m.c2));
           host.appendChild(x);
+          this.mergesDirty = true;
         }
       }
       this.dirty = true;
     }
+    /* Пишем только изменённые строки и объединения; весь остальной текст листа остаётся байт в байт. */
     toString() {
-      const m = this.mergesNode(false);
-      if (m) {
-        if (m.children.length) m.setAttribute("count", m.children.length);
-        else m.parentNode.removeChild(m);
+      const ser = (node) =>
+        new XMLSerializer().serializeToString(node).replace(/\s+xmlns(:[\w.-]+)?="[^"]*"/g, "");
+      const merges = this.mergesNode(false);
+      /* исходные строки сравниваются с текущими: неизменившиеся не трогаем */
+      const spans = [];
+      const re = /<((?:[\w.-]+:)?row)\b([^>]*?)(\/>|>[\s\S]*?<\/\1>)/g;
+      let m;
+      const dataStart = this.xml.search(/<(?:[\w.-]+:)?sheetData\b/);
+      re.lastIndex = Math.max(0, dataStart);
+      const seen = new Set();
+      while ((m = re.exec(this.xml))) {
+        const r = Number((/\br="(\d+)"/.exec(m[2]) || [])[1]);
+        if (!r) continue;
+        seen.add(r);
+        if (
+          this.dirtyRows.has(r) &&
+          new XMLSerializer().serializeToString(this.rows.get(r)) !== this.orig.get(r)
+        )
+          spans.push([m.index, m.index + m[0].length, ser(this.rows.get(r))]);
       }
-      const body = new XMLSerializer().serializeToString(this.doc).replace(/^<\?xml[^>]*\?>/, "");
-      return (this.decl ? this.decl + "\r\n" : "") + body;
+      /* новые строки, которых не было в файле, вставляем перед следующей существующей */
+      for (const r of this.dirtyRows)
+        if (!seen.has(r)) {
+          const next = [...seen].filter((k) => k > r).sort((a, b) => a - b)[0];
+          let at;
+          if (next) {
+            const mm = new RegExp('<(?:[\\w.-]+:)?row\\b[^>]*\\br="' + next + '"').exec(this.xml.slice(dataStart));
+            at = dataStart + mm.index;
+          } else at = this.xml.search(/<\/(?:[\w.-]+:)?sheetData>/);
+          spans.push([at, at, ser(this.rows.get(r))]);
+        }
+      if (this.mergesDirty) {
+        /* объединения: исходный порядок сохраняется, новые дописываются в конец */
+        const now = merges ? [...merges.children].map((x) => x.getAttribute("ref")) : [];
+        const old = /<((?:[\w.-]+:)?mergeCells)\b([^>]*?)(?:\/>|>([\s\S]*?)<\/\1>)/.exec(this.xml);
+        const oldRefs = old ? [...(old[3] || "").matchAll(/\bref="([^"]+)"/g)].map((x) => x[1]) : [];
+        const keep = new Set(now);
+        const order = [...oldRefs.filter((r) => keep.has(r)), ...now.filter((r) => !oldRefs.includes(r))];
+        const unchanged = order.length === oldRefs.length && order.every((r, k) => r === oldRefs[k]);
+        if (!unchanged) {
+          const tag = old ? old[1] : (this.doc.documentElement.prefix ? this.doc.documentElement.prefix + ":" : "") + "mergeCells";
+          const item = tag.replace(/mergeCells$/, "mergeCell");
+          const attrs = old ? old[2].replace(/\bcount="\d+"/, 'count="' + order.length + '"') : ' count="' + order.length + '"';
+          const text = order.length
+            ? "<" + tag + attrs + ">" + order.map((r) => "<" + item + ' ref="' + r + '"/>').join("") + "</" + tag + ">"
+            : "";
+          if (old) spans.push([old.index, old.index + old[0].length, text]);
+          else if (text) {
+            const end = /<\/(?:[\w.-]+:)?sheetData>/.exec(this.xml);
+            spans.push([end.index + end[0].length, end.index + end[0].length, text]);
+          }
+        }
+      }
+      spans.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+      let out = "",
+        pos = 0;
+      for (const [a, b, t] of spans) {
+        out += this.xml.slice(pos, a) + t;
+        pos = b;
+      }
+      return out + this.xml.slice(pos);
     }
   }
 
@@ -288,7 +360,11 @@ window.XlsxPatch = (() => {
         return sheets[name];
       },
       async save() {
-        for (const [name, sh] of Object.entries(sheets)) if (sh.dirty) get(paths[name]).newText = sh.toString();
+        for (const [name, sh] of Object.entries(sheets))
+          if (sh.dirty) {
+            const t = sh.toString();
+            if (t !== sh.xml) get(paths[name]).newText = t;
+          }
         return writeZip(entries);
       },
     };
