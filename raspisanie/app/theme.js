@@ -4,9 +4,9 @@ window.Theme = (() => {
   const mq = window.matchMedia ? matchMedia("(prefers-color-scheme: dark)") : null;
   const get = () => {
     try {
-      return localStorage.getItem(KEY) || "auto";
+      return localStorage.getItem(KEY) || "light";
     } catch {
-      return "auto";
+      return "light";
     }
   };
   const apply = () => {
@@ -25,25 +25,24 @@ window.Theme = (() => {
   /* Кнопка солнце/луна в шапке: переключает светлую и тёмную тему */
   const isDark = () => document.documentElement.dataset.theme === "dark";
   const toggle = () => set(isDark() ? "light" : "dark");
-  const bind = () => {
+  const label = () => {
     const b = document.getElementById("theme-btn");
     if (!b) return;
-    const label = () => {
-      const t = isDark() ? "Светлая тема" : "Тёмная тема";
-      b.title = t;
-      b.setAttribute("aria-label", t);
-    };
-    b.onclick = () => {
-      document.documentElement.classList.add("theme-anim");
-      toggle();
-      label();
-      setTimeout(() => document.documentElement.classList.remove("theme-anim"), 450);
-      if (window.render && document.querySelector("[data-theme-set]")) window.render();
-    };
-    label();
-    if (mq) (mq.addEventListener ? mq.addEventListener("change", label) : mq.addListener(label));
+    const t = isDark() ? "Светлая тема" : "Тёмная тема";
+    b.title = t;
+    b.setAttribute("aria-label", t);
   };
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bind);
-  else bind();
+  /* обработчик на весь документ: кнопка работает, даже если шапку перерисовали */
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest || !e.target.closest("#theme-btn")) return;
+    document.documentElement.classList.add("theme-anim");
+    toggle();
+    label();
+    setTimeout(() => document.documentElement.classList.remove("theme-anim"), 450);
+    if (typeof window.render === "function" && document.querySelector("[data-theme-set]")) window.render();
+  });
+  if (mq) (mq.addEventListener ? mq.addEventListener("change", label) : mq.addListener(label));
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", label);
+  else label();
   return { get, set, apply, toggle };
 })();
