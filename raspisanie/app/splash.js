@@ -53,7 +53,7 @@
     done = true;
     box.classList.add("out");
     document.documentElement.classList.remove("splash-on");
-    setTimeout(() => box.remove(), 900);
+    setTimeout(() => box.remove(), 600);
   };
   box.addEventListener("click", finish);
   addEventListener("keydown", finish, { once: true });
@@ -65,7 +65,7 @@
   }
   /* каждая линия «рисуется» от начала до конца (Web Animations — работает сразу при загрузке) */
   const paths = [...lines.children];
-  const total = 2.4; // секунды на рисование
+  const total = 1.7; // секунды на рисование
   paths.forEach((p, i) => {
     let len = 300;
     try {
@@ -73,12 +73,12 @@
     } catch {}
     p.style.strokeDasharray = len;
     p.style.strokeDashoffset = len;
-    const delay = (i / paths.length) * 700;
+    const delay = (i / paths.length) * 500;
     try {
       p.animate([{ strokeDashoffset: len }, { strokeDashoffset: 0 }], {
         duration: total * 1000 - delay,
         delay,
-        easing: "cubic-bezier(.65,0,.35,1)",
+        easing: "cubic-bezier(.45,.05,.3,1)",
         fill: "forwards",
       });
     } catch {
@@ -86,7 +86,7 @@
     }
   });
   requestAnimationFrame(() => box.classList.add("draw"));
-  setTimeout(() => box.classList.add("filled"), total * 1000 - 250);
-  setTimeout(() => box.classList.add("text"), total * 1000 + 100);
-  setTimeout(finish, total * 1000 + 1700);
+  setTimeout(() => box.classList.add("filled"), total * 1000);
+  setTimeout(() => box.classList.add("text"), total * 1000 + 150);
+  setTimeout(finish, total * 1000 + 1500);
 })();
