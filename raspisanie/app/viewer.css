@@ -504,3 +504,16 @@ html[data-theme="dark"] .btn.theme-btn{background:#2c2c2e}
 .wf-list li{margin:4px 0}
 .mass-block{border-top:1px solid var(--line);padding-top:10px;margin-top:10px}
 .mass-block .btn[disabled]{opacity:.45;cursor:default}
+/* раскрывающийся список преподавателей и кабинетов в окне пары */
+.combo{position:relative;display:flex;flex:0 1 65%;min-width:0}
+#sheet .combo input{max-width:none;width:100%}
+.combo .inp{flex:1;width:100%;max-width:none;min-width:0;padding-right:40px}
+.combo-btn{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:32px;height:32px;border:0;border-radius:8px;background:transparent;color:var(--muted);font-size:1rem;cursor:pointer}
+.combo-btn:hover{background:var(--fill);color:var(--ink)}
+.combo-list{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:60;max-height:260px;overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:var(--sh);padding:4px}
+.combo-opt{display:block;width:100%;text-align:left;border:0;background:transparent;color:var(--ink);padding:7px 10px;border-radius:8px;cursor:pointer;font:inherit}
+.combo-opt b{display:block;font-weight:600}
+.combo-opt small{display:block;color:var(--green);font-size:.78rem}
+.combo-opt.busy small{color:var(--red)}
+.combo-opt:hover,.combo-opt.on{background:var(--fill)}
+.combo-none{margin:0;padding:8px 10px;color:var(--muted);font-size:.85rem}
