@@ -265,8 +265,11 @@ const labels = {
   building: "Корпус",
   specialty: "Специальность",
 };
+function dayLabel(d) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(d) ? new Date(d + "T12:00:00").toLocaleDateString("ru", { weekday: "long" }) + ", " + dm(d) : d;
+}
 function select(key, values, value, label) {
-  return `<label class="filter">${esc(label)}<select class="inp" data-filter="${key}"><option value="">Все</option>${values.map((v) => `<option ${v === value ? "selected" : ""}>${esc(v)}</option>`).join("")}</select></label>`;
+  return `<label class="filter">${esc(label)}<select class="inp" data-filter="${key}"><option value="">Все</option>${values.map((v) => `<option value="${esc(v)}" ${v === value ? "selected" : ""}>${esc(key === "date" ? dayLabel(v) : v)}</option>`).join("")}</select></label>`;
 }
 function time(l) {
   return Model.times(l, state.settings)?.join("–") || "Звонки не заданы";
@@ -492,7 +495,7 @@ function schedule() {
       )}${select("date", allDates, ui.filters.date, "День / вся неделя")}</div>${dayBar(allDates)}<div class="status"><span class="pill">Показано: ${visible.length}</span><span class="seg view-seg">${[["cards", "Карточки"], ["table", "Таблица"]].map(([v, t]) => `<button data-view="${v}" aria-pressed="${(ui.view || "cards") === v}">${t}</button>`).join("")}</span><span class="pill bad">Конфликтов: ${analysis.length}</span><span class="legend"><i style="--h:211"></i>корпус 1<i style="--h:145"></i>корпус 2<i style="--h:28"></i>корпус 3<i style="--h:265"></i>спортзал / другое</span><span class="pill">Изменено: ${state.lessons.filter((l) => scope(l) && Model.changed(l, state.baseline)).length}</span>${Tools.unsaved(state) ? '<span class="pill warn">Правки не скачаны в Excel</span>' : ""}</div>${ui.moving ? '<div class="notice blue"><p>Выберите вторую пару для обмена. Время занятий поменяется местами; каждое занятие подгруппы меняется отдельно.</p><button class="btn" id="cancel-move">Отмена обмена</button></div>' : ""}${Tools.notesHtml(ui.loadNotes, esc)}${conflictsBox()}${myIssues().length ? `<details class="card"><summary>Замечания по файлу: ${myIssues().length}</summary><p>Пары, у которых в файле не указан кабинет или преподаватель. Они загружены, просто проверьте их.</p>${myIssues().map((x) => `<p>${esc(x.where)}: ${esc(x.reason)} — ${esc(x.raw)}</p>`).join("")}</details>` : ""}<div class="print-title"><h2>КузТАГиС · расписание</h2><p>${
       Object.entries(ui.filters)
         .filter(([, v]) => v)
-        .map(([k, v]) => esc((labels[k] || "Дата") + ": " + v))
+        .map(([k, v]) => esc(k === "date" ? "День: " + dayLabel(v) : (labels[k] || "Дата") + ": " + v))
         .join(" · ") || scopeName()
     }</p></div>${ui.view === "table" ? tableView(dates) : `<div class="week">${dates
       .filter((date) => ui.filters.date || visible.some((x) => x.date === date))
