@@ -518,3 +518,13 @@ html[data-theme="dark"] .btn.theme-btn{background:#2c2c2e}
 .combo-opt:hover,.combo-opt.on{background:var(--fill)}
 .combo-none{margin:0;padding:8px 10px;color:var(--muted);font-size:.85rem}
 .btn.dim{opacity:.45;cursor:help}
+/* кнопки дней недели */
+.day-bar{position:relative;display:flex;gap:6px;overflow-x:auto;padding:4px 2px 8px;margin:6px 0 2px;scrollbar-width:thin}
+.day-btn{flex:0 0 auto;min-width:74px;border:0;border-radius:12px;background:var(--fill);color:var(--ink);padding:7px 12px;cursor:pointer;font:inherit;text-align:center;line-height:1.15;transition:background .2s,color .2s}
+.day-btn b{display:block;font-size:.95rem}
+.day-btn small{display:block;font-size:.72rem;color:var(--muted)}
+.day-btn:hover{background:var(--line)}
+.day-btn.on{background:var(--accent);color:#fff}
+.day-btn.on small{color:rgba(255,255,255,.85)}
+.day-btn.no-pairs{opacity:.5}
+@media print{.day-bar{display:none}}
