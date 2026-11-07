@@ -151,7 +151,7 @@ window.Tools = (() => {
     const base = new Map(st.baseline.map((b) => [b.id, b]));
     return st.lessons
       .filter((l) => Model.changed(l, st.baseline))
-      .map((l) => ({ l, b: base.get(l.id) }))
+      .map((l) => ({ l, b: base.get(l.id) || (l.added ? { ...l, isNew: true } : null) }))
       .filter((x) => x.b)
       .sort((a, b) => a.b.date.localeCompare(b.b.date) || (a.b.period ?? -1) - (b.b.period ?? -1));
   }
@@ -159,6 +159,10 @@ window.Tools = (() => {
     const base = new Map(st.baseline.map((b) => [b.id, b]));
     const l = st.lessons.find((x) => x.id === id),
       b = base.get(id);
+    if (l && l.added) {
+      st.lessons.splice(st.lessons.indexOf(l), 1);
+      return;
+    }
     if (!l || !b) return;
     const moved = l.date !== b.date || l.period !== b.period;
     /* у обмена возвращаем и вторую пару, стоящую теперь на старом месте */
@@ -255,5 +259,19 @@ window.Tools = (() => {
     );
   }
 
-  return { freeSlots, freeRooms, afterLoad, notesHtml, sig, unsaved, dayFilter, candidates, changes, revert, load, DAY, dayOf };
+  /* Окна у групп: пустые пары между занятиями в один день (подгруппы считаются вместе) */
+  function groupWindows(st, groups) {
+    const out = [];
+    for (const g of groups) {
+      const byDay = {};
+      for (const l of st.lessons)
+        if (!l.cancelled && l.period !== null && l.groups.includes(g)) (byDay[l.date] = byDay[l.date] || new Set()).add(l.period);
+      for (const [d, set] of Object.entries(byDay)) {
+        const ps = [...set].sort((a, b) => a - b);
+        for (let p = ps[0] + 1; p < ps[ps.length - 1]; p++) if (!set.has(p)) out.push({ g, d, p });
+      }
+    }
+    return out.sort((a, b) => a.g.localeCompare(b.g, "ru", { numeric: true }) || a.d.localeCompare(b.d) || a.p - b.p);
+  }
+  return { groupWindows, freeSlots, freeRooms, afterLoad, notesHtml, sig, unsaved, dayFilter, candidates, changes, revert, load, DAY, dayOf };
 })();

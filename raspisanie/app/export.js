@@ -85,6 +85,23 @@ window.Export = (() => {
     const base = new Map(state.baseline.map((b) => [b.id, b]));
     const book = await XlsxPatch.open(bytes);
     const warnings = [...extra];
+    /* Новые пары: оформление клетки берём у похожей пары из исходного файла (та же форма — вся группа или подгруппа). */
+    const added = new Set();
+    for (const l of state.lessons) {
+      if (!l.added || l.cancelled) continue;
+      const slot = layout[l.date + "|" + l.groups[0]];
+      const same = (b) => b.source?.sheet && b.period !== null && b.subgroup === l.subgroup;
+      const T =
+        state.baseline.find((b) => same(b) && slot && b.source.sheet === slot.sheet && origin(b).base === slot.base) ||
+        state.baseline.find((b) => same(b) && slot && b.source.sheet === slot.sheet) ||
+        state.baseline.find(same);
+      if (!T) {
+        warnings.push(`«${label(l)}»: не нашлось образца оформления, новая пара в файл не запишется`);
+        continue;
+      }
+      base.set(l.id, { ...T, id: l.id, subject: "\u0000", teacher: "\u0000", room: "\u0000" });
+      added.add(l.id);
+    }
     const target = (l) => {
       const slot = layout[l.date + "|" + l.groups[0]];
       const before = l.period === null;
@@ -98,7 +115,9 @@ window.Export = (() => {
     for (const l of state.lessons) {
       const b = base.get(l.id);
       if (!b?.source?.sheet || !b.source.cell) continue;
+      const isNew = added.has(l.id);
       const moved =
+        isNew ||
         b.date !== l.date ||
         b.period !== l.period ||
         b.subgroup !== l.subgroup ||
@@ -106,12 +125,16 @@ window.Export = (() => {
       const edited =
         fields.some((k) => (b[k] || "") !== (l[k] || "")) || !!l.cancelled !== !!b.cancelled;
       let to = moved ? target(l) : home(b);
+      if (!to && isNew) {
+        warnings.push(`«${label(l)}»: у группы в файле нет такой пары — новая пара в файл не запишется`);
+        continue;
+      }
       if (!to) {
         warnings.push(`«${label(l)}»: у группы в файле нет такой пары — занятие останется на прежнем месте`);
         to = home(b);
       }
       place.set(l.id, to);
-      if (moved || edited) plan.push({ l, b, to, moved: keyOf(to) !== keyOf(home(b)) });
+      if (moved || edited) plan.push({ l, b, to, isNew, moved: isNew || keyOf(to) !== keyOf(home(b)) });
     }
     if (!plan.length) {
       save(new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), name);
@@ -121,8 +144,10 @@ window.Export = (() => {
     const touched = new Map();
     for (const p of plan)
       if (p.moved) {
-        const h = home(p.b);
-        touched.set(keyOf(h), h);
+        if (!p.isNew) {
+          const h = home(p.b);
+          touched.set(keyOf(h), h);
+        }
         touched.set(keyOf(p.to), p.to);
       }
     const occupants = new Map([...touched.keys()].map((k) => [k, []]));
@@ -145,7 +170,11 @@ window.Export = (() => {
       /* переехавшие сюда занятия важнее тех, что стояли раньше */
       const list = occupants
         .get(k)
-        .sort((a, b) => Number(keyOf(home(base.get(b.id))) !== k) - Number(keyOf(home(base.get(a.id))) !== k));
+        .sort(
+          (a, b) =>
+            Number(added.has(b.id) || keyOf(home(base.get(b.id))) !== k) -
+            Number(added.has(a.id) || keyOf(home(base.get(a.id))) !== k),
+        );
       const cols = new Map();
       for (const l of list) {
         const sh = shape(base.get(l.id));
@@ -197,6 +226,11 @@ window.Export = (() => {
         col = to.base + sh.dc;
       if ((b.subject || "") !== (l.subject || "")) sheet.setValue(to.r, col, l.subject);
       if (to.h === 2 && (b.teacher || "") !== (l.teacher || "")) sheet.setValue(to.r + 1, col, l.teacher);
+      if (added.has(l.id) && to.h === 2) {
+        /* у новой пары дисциплина и преподаватель записываются всегда, даже пустые */
+        sheet.setValue(to.r, col, l.subject);
+        sheet.setValue(to.r + 1, col, l.teacher);
+      }
       if ((b.room || "") !== (l.room || "")) {
         let rc = col + 1;
         if (sh.w === 6)
