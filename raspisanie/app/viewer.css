@@ -528,3 +528,13 @@ html[data-theme="dark"] .btn.theme-btn{background:#2c2c2e}
 .day-btn.on small{color:rgba(255,255,255,.85)}
 .day-btn.no-pairs{opacity:.5}
 @media print{.day-bar{display:none}}
+/* кнопка «Скачать Excel» */
+.dl-btn{display:inline-flex;align-items:center;gap:6px}
+.dl-btn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.dl-btn.pending{background:var(--green);color:#fff;box-shadow:0 0 0 0 rgba(31,138,59,.5);animation:dlPulse 2.4s ease-out infinite}
+.dl-btn.pending:hover{filter:brightness(1.08)}
+@keyframes dlPulse{0%{box-shadow:0 0 0 0 rgba(31,138,59,.45)}70%{box-shadow:0 0 0 10px rgba(31,138,59,0)}100%{box-shadow:0 0 0 0 rgba(31,138,59,0)}}
+@media (prefers-reduced-motion:reduce){.dl-btn.pending{animation:none}}
+.dl-pill{border:0;cursor:pointer;font:inherit}
+.dl-pill:hover{text-decoration:underline}
+@media print{.dl-btn{display:none}}
