@@ -460,3 +460,15 @@ html[data-theme="dark"] .tag.hf,html[data-theme="dark"] .tag.db{background:#2c2c
 html[data-theme="dark"] .step button:hover{background:#2c2c2e}
 html[data-theme="dark"] .sheet{background:#1c1c1e}
 html[data-theme="dark"] .chip[aria-pressed="true"]{background:#f5f5f7;color:#000}
+/* Кнопка темы: луна в светлой теме, солнце в тёмной */
+.btn.theme-btn{width:38px;height:38px;padding:0;display:inline-grid;place-items:center;border-radius:50%}
+.theme-btn svg{grid-area:1/1;width:20px;height:20px;transition:transform .45s cubic-bezier(.32,.72,0,1),opacity .3s ease}
+.theme-btn .i-moon{fill:currentColor}
+.theme-btn .i-sun{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}
+.theme-btn .i-sun circle{fill:currentColor;stroke:none}
+.theme-btn .i-sun{opacity:0;transform:rotate(-90deg) scale(.5)}
+html[data-theme="dark"] .theme-btn .i-moon{opacity:0;transform:rotate(90deg) scale(.5)}
+html[data-theme="dark"] .theme-btn .i-sun{opacity:1;transform:none;color:#ffd60a}
+html.theme-anim body,html.theme-anim .bar,html.theme-anim .card,html.theme-anim .les,html.theme-anim .btn,html.theme-anim .inp{transition:background-color .4s ease,color .4s ease,border-color .4s ease}
+@media print{.theme-btn{display:none}}
+html[data-theme="dark"] .btn.theme-btn{background:#2c2c2e}

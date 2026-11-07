@@ -22,5 +22,28 @@ window.Theme = (() => {
   };
   if (mq) (mq.addEventListener ? mq.addEventListener("change", apply) : mq.addListener(apply));
   apply();
-  return { get, set, apply };
+  /* Кнопка солнце/луна в шапке: переключает светлую и тёмную тему */
+  const isDark = () => document.documentElement.dataset.theme === "dark";
+  const toggle = () => set(isDark() ? "light" : "dark");
+  const bind = () => {
+    const b = document.getElementById("theme-btn");
+    if (!b) return;
+    const label = () => {
+      const t = isDark() ? "Светлая тема" : "Тёмная тема";
+      b.title = t;
+      b.setAttribute("aria-label", t);
+    };
+    b.onclick = () => {
+      document.documentElement.classList.add("theme-anim");
+      toggle();
+      label();
+      setTimeout(() => document.documentElement.classList.remove("theme-anim"), 450);
+      if (window.render && document.querySelector("[data-theme-set]")) window.render();
+    };
+    label();
+    if (mq) (mq.addEventListener ? mq.addEventListener("change", label) : mq.addListener(label));
+  };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bind);
+  else bind();
+  return { get, set, apply, toggle };
 })();
