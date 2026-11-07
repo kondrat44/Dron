@@ -472,3 +472,35 @@ html[data-theme="dark"] .theme-btn .i-sun{opacity:1;transform:none;color:#ffd60a
 html.theme-anim body,html.theme-anim .bar,html.theme-anim .card,html.theme-anim .les,html.theme-anim .btn,html.theme-anim .inp{transition:background-color .4s ease,color .4s ease,border-color .4s ease}
 @media print{.theme-btn{display:none}}
 html[data-theme="dark"] .btn.theme-btn{background:#2c2c2e}
+/* Таблица как в Excel */
+.view-seg{display:inline-flex;margin-right:6px}
+.view-seg button{padding:4px 12px;font-size:.82rem}
+.view-seg button[aria-pressed="true"]{background:var(--card);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.tv-wrap{overflow:auto;max-height:78vh;border-radius:14px;background:var(--card);box-shadow:var(--sh);margin-top:10px}
+.tv{border-collapse:separate;border-spacing:0;font-size:.8rem;min-width:100%}
+.tv th,.tv td{border-bottom:1px solid var(--line);border-right:1px solid var(--line);padding:4px;vertical-align:top;background:var(--card)}
+.tv thead th{position:sticky;top:0;z-index:3;background:var(--fill);font-weight:600;white-space:nowrap;padding:8px 6px}
+.tv .tv-day{position:sticky;left:0;z-index:2;min-width:86px;text-align:left;background:var(--fill)}
+.tv thead .tv-day{z-index:4}
+.tv .tv-day span{display:block;text-transform:capitalize;font-weight:600}
+.tv .tv-day small,.tv .tv-p small{display:block;color:var(--muted);font-weight:400;font-size:.72rem}
+.tv .tv-p{position:sticky;left:86px;z-index:2;min-width:70px;background:var(--fill);text-align:center}
+.tv thead .tv-p{z-index:4}
+.tv td{min-width:150px;max-width:200px}
+.tv tr.day-start>*{border-top:2px solid var(--ink2)}
+.les.mini{display:block;width:100%;text-align:left;padding:5px 7px;margin:0 0 3px;border-radius:8px;position:relative}
+.les.mini .s{font-size:.78rem;-webkit-line-clamp:2}
+.les.mini .m{font-size:.7rem;margin-top:1px}
+.les.mini .sg{display:block;font-size:.66rem;font-weight:600;color:var(--muted)}
+.les.mini .dot{position:absolute;top:4px;right:5px;width:8px;height:8px;border-radius:50%}
+.les.mini .dot.ch,.les.mini .dot.new{background:var(--accent)}
+.les.mini .dot.nt{width:auto;height:auto;background:none;font-size:.7rem;top:2px;right:16px}
+.tv-empty{width:100%;min-height:34px;border:1px dashed var(--line);background:none;border-radius:8px;color:var(--muted);font-size:1rem;opacity:.45}
+.tv-empty:hover{opacity:1;border-color:var(--accent);color:var(--accent)}
+@media print{.tv-wrap{display:none}.view-seg{display:none}}
+/* Кто свободен / массовые правки */
+.wf-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-top:8px}
+.wf-list{margin:0;padding-left:18px;max-height:360px;overflow:auto;font-size:.9rem;line-height:1.4}
+.wf-list li{margin:4px 0}
+.mass-block{border-top:1px solid var(--line);padding-top:10px;margin-top:10px}
+.mass-block .btn[disabled]{opacity:.45;cursor:default}
