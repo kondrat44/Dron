@@ -397,7 +397,7 @@ details.card .why-list{color:#3a3a3c}
 .splash-fill{opacity:0;transition:opacity .6s ease}
 .splash.filled .splash-fill{opacity:1}
 .splash.filled g{opacity:0;transition:opacity .6s ease .1s}
-.splash-title{font-family:var(--fd);font-weight:700;letter-spacing:.06em;font-size:clamp(28px,7vmin,64px);color:#2c4a68;opacity:0;transform:translateY(12px);transition:opacity .6s ease,transform .6s ease}
+.splash-title{font-family:var(--fd);font-weight:700;letter-spacing:.06em;font-size:clamp(28px,7vmin,64px);color:#5B7896;opacity:0;transform:translateY(12px);transition:opacity .6s ease,transform .6s ease}
 .splash-sub{font-family:var(--fd);font-size:clamp(13px,2.4vmin,18px);color:#6e7f92;opacity:0;transform:translateY(8px);transition:opacity .6s ease .15s,transform .6s ease .15s}
 .splash.text .splash-title,.splash.text .splash-sub,.splash.static .splash-title,.splash.static .splash-sub{opacity:1;transform:none}
 .splash.static .splash-fill{opacity:1}.splash.static g{opacity:0}

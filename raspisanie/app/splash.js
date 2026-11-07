@@ -36,6 +36,16 @@
   box.append(svg, title, sub);
   document.body.appendChild(box);
   document.documentElement.classList.add("splash-on");
+  /* Ось логотипа — середина книжки под глобусом. Центрируем по ней, чтобы надпись стояла ровно под логотипом. */
+  try {
+    const bb = fill.getBBox();
+    const boxes = [...lines.children].map((p) => p.getBBox());
+    const bottom = Math.max(...boxes.map((q) => q.y + q.height));
+    const book = boxes.filter((q) => q.y > bottom - 45);
+    const axis = (Math.min(...book.map((q) => q.x)) + Math.max(...book.map((q) => q.x + q.width))) / 2;
+    const half = Math.max(axis - bb.x, bb.x + bb.width - axis) + 2;
+    svg.setAttribute("viewBox", `${axis - half} ${bb.y - 2} ${half * 2} ${bb.height + 4}`);
+  } catch {}
 
   let done = false;
   const finish = () => {
