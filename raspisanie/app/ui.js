@@ -519,13 +519,29 @@ function schedule() {
         notify("Отмечено как сдвоенная пара — конфликта больше нет");
       }),
   );
-  for (const [id, shift, word] of [["today", 0, "Сегодня"], ["tomorrow", 1, "Завтра"]])
-    $(id).onclick = () => {
-      const d = Tools.dayFilter(state, shift);
-      if (!d) return notify(word + " — этого дня нет в загруженной неделе");
-      ui.filters.date = d;
-      render();
-    };
+  {
+    const ds = [...new Set([...(state.dates || []), ...state.lessons.map((l) => l.date)])].sort();
+    const span = ds.length ? dm(ds[0]) + "–" + dm(ds[ds.length - 1]) : "";
+    for (const [id, shift, word] of [["today", 0, "Сегодня"], ["tomorrow", 1, "Завтра"]]) {
+      const d0 = Tools.dayFilter(state, shift);
+      const d = d0 && state.lessons.some((l) => l.date === d0 && !l.cancelled) ? d0 : null;
+      const when = new Date();
+      when.setDate(when.getDate() + shift);
+      const iso = Tools.isoLocal(when);
+      const inWeek = !d && ds.length && iso >= ds[0] && iso <= ds[ds.length - 1];
+      const why = inWeek
+        ? `${word} ${dm(iso)} в загруженном файле пар нет (праздник или выходной).`
+        : `${word} ${dm(iso)}, а загружена неделя ${span}. Кнопка работает, когда загружена текущая неделя.`;
+      const b = $(id);
+      b.classList.toggle("dim", !d && !inWeek);
+      b.title = d ? "Показать только " + word.toLowerCase() + " (" + dm(d) + ")" : why;
+      b.onclick = () => {
+        if (!d) return notify(why);
+        ui.filters.date = d;
+        render();
+      };
+    }
+  }
   $("search").oninput = (e) => {
     ui.q = e.target.value;
     suggestions();

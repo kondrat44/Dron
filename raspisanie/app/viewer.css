@@ -517,3 +517,4 @@ html[data-theme="dark"] .btn.theme-btn{background:#2c2c2e}
 .combo-opt.busy small{color:var(--red)}
 .combo-opt:hover,.combo-opt.on{background:var(--fill)}
 .combo-none{margin:0;padding:8px 10px;color:var(--muted);font-size:.85rem}
+.btn.dim{opacity:.45;cursor:help}

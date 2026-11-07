@@ -273,5 +273,5 @@ window.Tools = (() => {
     }
     return out.sort((a, b) => a.g.localeCompare(b.g, "ru", { numeric: true }) || a.d.localeCompare(b.d) || a.p - b.p);
   }
-  return { groupWindows, freeSlots, freeRooms, afterLoad, notesHtml, sig, unsaved, dayFilter, candidates, changes, revert, load, DAY, dayOf };
+  return { isoLocal, groupWindows, freeSlots, freeRooms, afterLoad, notesHtml, sig, unsaved, dayFilter, candidates, changes, revert, load, DAY, dayOf };
 })();
