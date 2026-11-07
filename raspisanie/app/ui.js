@@ -244,6 +244,26 @@ function select(key, values, value, label) {
 function time(l) {
   return Model.times(l, state.settings)?.join("–") || "Звонки не заданы";
 }
+/* Сдвоенные пары: две группы вместе в одном кабинете / у одного преподавателя — не конфликт. */
+const ckey = (c) => [...c.ids].sort().join("|");
+const combinedSet = () => new Set(state.combined || []);
+const notCombined = (c) => !combinedSet().has(ckey(c));
+function combinedWith(l) {
+  const byId = new Map(state.lessons.map((x) => [x.id, x]));
+  return (state.combined || [])
+    .map((k) => k.split("|"))
+    .filter((ids) => ids.includes(l.id))
+    .map((ids) => byId.get(ids.find((x) => x !== l.id)))
+    .filter((o) => o && !o.cancelled && Model.overlaps(o, l, state.settings));
+}
+function setCombined(key, on) {
+  commit(() => {
+    const set = new Set(state.combined || []);
+    if (on) set.add(key);
+    else set.delete(key);
+    state.combined = [...set];
+  });
+}
 /* Почему пара красная: понятное объяснение каждого конфликта. */
 let baseKeys = null,
   baseFor = null;
@@ -267,6 +287,10 @@ function conflictReasons(l, list = analysis, lessons = state.lessons, max = 45) 
     if (!o) continue;
     const og = o.groups.join(", ") + (o.subgroup ? " (" + o.subgroup + " подгр.)" : "");
     const was = base.has([...c.ids].sort().join("|")) ? " — так было в исходном файле" : "";
+    const key = ckey(c),
+      canCombine = !c.types.includes("Группа") || !o.groups.some((g) => l.groups.includes(g));
+    const push0 = out.push.bind(out);
+    out.push = (x) => push0({ ...x, key, canCombine, og });
     for (const t of c.types) {
       if (t === "Кабинет")
         out.push({ t, text: `Кабинет ${o.room} в это время занят: ${og}, «${cut(o.subject)}», ${o.teacher || "без преподавателя"}${was}` });
@@ -275,6 +299,7 @@ function conflictReasons(l, list = analysis, lessons = state.lessons, max = 45) 
       if (t === "Группа")
         out.push({ t, text: `У ${og} в это же время уже стоит «${cut(o.subject)}» (${o.teacher || "без преподавателя"}, ауд. ${o.room || "?"})${was}` });
     }
+    out.push = push0;
   }
   return out;
 }
@@ -294,8 +319,9 @@ function conflictsBox() {
     const key = analysis.filter((c) => c.ids.includes(l.id)).map((c) => [...c.ids].sort().join("|")).join(",");
     if (seen.has(key)) continue;
     seen.add(key);
+    const combo = why.find((x) => x.canCombine);
     rows.push(
-      `<li><button class="link-btn open-conf" data-id="${esc(l.id)}">${esc(Tools.DAY[Tools.dayOf(l.date)] + " " + dm(l.date) + ", " + pairName(l.period) + " · " + l.groups.join(", ") + " «" + l.subject + "»")}</button><br>${why.map((x) => esc(x.text)).join("<br>")}</li>`,
+      `<li>${combo ? `<button class="chip comb-on-list" data-key="${esc(combo.key)}">Сдвоенная — не конфликт</button> ` : ""}<button class="link-btn open-conf" data-id="${esc(l.id)}">${esc(Tools.DAY[Tools.dayOf(l.date)] + " " + dm(l.date) + ", " + pairName(l.period) + " · " + l.groups.join(", ") + " «" + l.subject + "»")}</button><br>${why.map((x) => esc(x.text)).join("<br>")}</li>`,
     );
   }
   return rows.length
@@ -320,7 +346,7 @@ function card(l) {
       x.groups.join() === l.groups.join(),
   );
   const why = conflicts.length ? conflictReasons(l, conflicts) : [];
-  return `<button class="les ${conflicts.length ? "bad" : ""} ${ui.moving === l.id ? "selected" : ""}" ${why.length ? `title="${esc(why.map((x) => x.text).join("\n") + "\nНажмите, чтобы исправить")}"` : ""} style="--h:211" data-lesson="${esc(l.id)}"><span class="s">${esc(l.subject)}</span><span class="m">${esc(l.groups.join(", "))}${l.subgroup ? " · " + l.subgroup + " подгр." : ""}</span>${l.teacher || l.period !== null ? `<span class="m">${esc(l.teacher || "Преподаватель не указан")}</span>` : ""}<span class="m">${esc(l.room ? "Ауд. " + l.room : "Кабинет не указан")}${Model.building(l.room, state.settings) ? " · корпус " + Model.building(l.room, state.settings) : ""}</span><span class="tags">${Model.changed(l, state.baseline) ? '<span class="tag mv">Изменено</span>' : ""}${(state.notes || {})[l.id] ? `<span class="tag note" title="${esc(state.notes[l.id])}">💬 ${esc(state.notes[l.id].length > 40 ? state.notes[l.id].slice(0, 40) + "…" : state.notes[l.id])}</span>` : ""}${same ? '<span class="tag db">Сдвоенная пара</span>' : ""}${conflicts.length ? `<span class="tag bd">${esc([...new Set(conflicts.flatMap((c) => c.types))].join(", "))}</span>` : ""}</span>${why.length ? `<span class="why">${why.slice(0, 2).map((x) => `<span>⚠ ${esc(x.text)}</span>`).join("")}${why.length > 2 ? `<span>…и ещё ${why.length - 2}</span>` : ""}<span class="why-fix">Как исправить: ${esc(howToFix[why[0].t])}. Нажмите на пару.</span></span>` : ""}</button>`;
+  return `<button class="les ${conflicts.length ? "bad" : ""} ${ui.moving === l.id ? "selected" : ""}" ${why.length ? `title="${esc(why.map((x) => x.text).join("\n") + "\nНажмите, чтобы исправить")}"` : ""} style="--h:211" data-lesson="${esc(l.id)}"><span class="s">${esc(l.subject)}</span><span class="m">${esc(l.groups.join(", "))}${l.subgroup ? " · " + l.subgroup + " подгр." : ""}</span>${l.teacher || l.period !== null ? `<span class="m">${esc(l.teacher || "Преподаватель не указан")}</span>` : ""}<span class="m">${esc(l.room ? "Ауд. " + l.room : "Кабинет не указан")}${Model.building(l.room, state.settings) ? " · корпус " + Model.building(l.room, state.settings) : ""}</span><span class="tags">${Model.changed(l, state.baseline) ? '<span class="tag mv">Изменено</span>' : ""}${(state.notes || {})[l.id] ? `<span class="tag note" title="${esc(state.notes[l.id])}">💬 ${esc(state.notes[l.id].length > 40 ? state.notes[l.id].slice(0, 40) + "…" : state.notes[l.id])}</span>` : ""}${same ? '<span class="tag db">Две пары подряд</span>' : ""}${combinedWith(l).length ? `<span class="tag comb">Сдвоенная с ${esc([...new Set(combinedWith(l).flatMap((o) => o.groups))].join(", "))}</span>` : ""}${conflicts.length ? `<span class="tag bd">${esc([...new Set(conflicts.flatMap((c) => c.types))].join(", "))}</span>` : ""}</span>${why.length ? `<span class="why">${why.slice(0, 2).map((x) => `<span>⚠ ${esc(x.text)}</span>`).join("")}${why.length > 2 ? `<span>…и ещё ${why.length - 2}</span>` : ""}<span class="why-fix">Как исправить: ${esc(howToFix[why[0].t])}. Нажмите на пару.</span></span>` : ""}</button>`;
 }
 function render() {
   const oldBad = new Set(
@@ -328,8 +354,8 @@ function render() {
   );
   /* Конфликты считаются по всему файлу (кабинеты и преподаватели общие), показываются только касающиеся отделения. */
   const inside = new Set(state.lessons.filter(scope).map((l) => l.id));
-  analysis = Model.conflicts(state.lessons, state.settings).filter((c) =>
-    c.ids.some((id) => inside.has(id)),
+  analysis = Model.conflicts(state.lessons, state.settings).filter(
+    (c) => c.ids.some((id) => inside.has(id)) && notCombined(c),
   );
   $("undo").disabled = !history.length;
   document.querySelector(".logo span").textContent = "КузТАГиС · " + scopeName();
@@ -373,7 +399,7 @@ function newConflicts() {
   const before = new Set(Model.conflicts(state.baseline, state.settings).map(key));
   const byId = new Map(state.lessons.map((l) => [l.id, l]));
   return Model.conflicts(state.lessons, state.settings)
-    .filter((c) => c.ids.some((id) => inside.has(id)) && !before.has(key(c)))
+    .filter((c) => c.ids.some((id) => inside.has(id)) && !before.has(key(c)) && notCombined(c))
     .map((c) => {
       const [a, b] = c.ids.map((id) => byId.get(id));
       const what = c.types.map((t) => t.toLowerCase()).join(" и ");
@@ -462,6 +488,13 @@ function schedule() {
       )}</div>${printTable(visible)}${visible.length ? "" : "<p>Ничего не найдено. Измените фильтры.</p>"}<details class="card no-print"><summary>Свободные кабинеты</summary><p class="hint">Только кабинеты, известные программе. Свободно означает отсутствие записи в загруженном расписании; полнота файла не подтверждена. Текстовые аудитории также проверяются по точному названию.</p><label>Дата <select class="inp" id="free-date">${allDates.map((d) => `<option ${d === ui.filters.date ? "selected" : ""}>${d}</option>`).join("")}</select></label> <label>Пара <input class="inp" id="free-period" type="number" min="1" max="20" value="${ui.freePeriod}"></label><button class="btn" id="free-check">Показать</button><p id="free-result"></p></details></section>`;
   bindBeta();
   document.querySelectorAll(".open-conf").forEach((b) => (b.onclick = () => editor(b.dataset.id)));
+  document.querySelectorAll(".comb-on-list").forEach(
+    (b) =>
+      (b.onclick = () => {
+        setCombined(b.dataset.key, true);
+        notify("Отмечено как сдвоенная пара — конфликта больше нет");
+      }),
+  );
   for (const [id, shift, word] of [["today", 0, "Сегодня"], ["tomorrow", 1, "Завтра"]])
     $(id).onclick = () => {
       const d = Tools.dayFilter(state, shift);
@@ -641,8 +674,8 @@ function editor(id) {
       target = ls.find((x) => x.id === id);
     target.teacher = $("edit-teacher").value.trim();
     target.room = $("edit-room").value.trim();
-    const conflicts = Model.conflicts(ls, state.settings).filter((x) =>
-      x.ids.includes(id),
+    const conflicts = Model.conflicts(ls, state.settings).filter(
+      (x) => x.ids.includes(id) && notCombined(x),
     );
     const r = target.room,
       info = Model.roomInfo(r),
@@ -664,11 +697,40 @@ function editor(id) {
           .join(" · ")
       : "";
     const why = conflictReasons(target, conflicts, ls, 90);
-    $("edit-conflicts").innerHTML = why.length
-      ? `<p><b>Почему пара красная:</b></p><ul class="why-list">${why
-          .map((x) => `<li>${esc(x.text)}</li>`)
-          .join("")}</ul><p class="hint">Что сделать: ${esc([...new Set(why.map((x) => howToFix[x.t]))].join("; или "))}. Подсказки ниже.</p>`
-      : "<p>Конфликтов у этой пары нет.</p>";
+    const combKeys = [...new Map(why.filter((x) => x.canCombine).map((x) => [x.key, x.og])).entries()];
+    const partners = combinedWith(l);
+    $("edit-conflicts").innerHTML =
+      (why.length
+        ? `<p><b>Почему пара красная:</b></p><ul class="why-list">${why
+            .map((x) => `<li>${esc(x.text)}</li>`)
+            .join("")}</ul><p class="hint">Что сделать: ${esc([...new Set(why.map((x) => howToFix[x.t]))].join("; или "))}. Подсказки ниже.</p>${
+            combKeys.length
+              ? `<p class="hint">Если группы на самом деле занимаются вместе (сдвоенная пара), отметьте это — конфликта не будет:</p><div class="chips">${combKeys
+                  .map(([k, og]) => `<button class="chip comb-on" data-key="${esc(k)}">Сдвоенная с ${esc(og)} — не конфликт</button>`)
+                  .join("")}</div>`
+              : ""
+          }`
+        : "<p>Конфликтов у этой пары нет.</p>") +
+      (partners.length
+        ? `<p class="comb-note">Сдвоенная пара с ${esc(partners.map((o) => o.groups.join(", ") + (o.subgroup ? " (" + o.subgroup + " подгр.)" : "")).join(", "))}: занимаются вместе, это не конфликт. <button class="link-btn comb-off">Убрать отметку</button></p>`
+        : "");
+    $("edit-conflicts").querySelectorAll(".comb-on").forEach(
+      (b) =>
+        (b.onclick = () => {
+          const v = typed();
+          close();
+          commit(() => apply(v));
+          setCombined(b.dataset.key, true);
+          notify("Отмечено как сдвоенная пара — конфликта больше нет");
+        }),
+    );
+    const off = $("edit-conflicts").querySelector(".comb-off");
+    if (off)
+      off.onclick = () => {
+        close();
+        for (const k of state.combined || []) if (k.split("|").includes(id)) setCombined(k, false);
+        notify("Отметка «сдвоенная» убрана");
+      };
     /* «Как исправить»: свободные кабинеты в это время или свободное время для пары */
     const types = new Set(conflicts.flatMap((x) => x.types));
     let fix = "";
@@ -906,7 +968,7 @@ function settings() {
 }
 function help() {
   $("main").innerHTML =
-    `<section class="view"><h2 class="ttl">Как пользоваться</h2><div class="card"><ol class="steps"><li><div><b>Загрузите файл.</b> Нажмите «Загрузить файл» и выберите Excel недели (.xlsx) из программы учебной части. Программа сама найдёт нужные группы (${esc(scopeName())}). Если с файлом что-то не так (мало групп, нет дней), вверху появится предупреждение.</div></li><li><div><b>Найдите нужное.</b> Начните вводить группу, фамилию или кабинет в строку поиска и нажмите подсказку, либо выберите в списках группу, преподавателя, кабинет, корпус или день. «Сегодня» и «Завтра» сразу показывают нужный день, «Сбросить фильтры» — всю неделю.</div></li><li><div><b>Поправьте пару.</b> Нажмите на пару: можно сменить преподавателя или кабинет (под кабинетом видно, что это за кабинет и свободен ли он), написать комментарий, перенести пару на свободное место или поменять местами с другой. Пары можно и просто перетаскивать мышкой.</div></li><li><div><b>Преподаватель заболел.</b> В окне пары — «Снять пару (окно)». В «Сервисе» → «Замена преподавателя» можно назначить замену (★ — ведёт тот же предмет) или поставить окно сразу на все его пары за день.</div></li><li><div><b>Следите за красным.</b> Красным выделены конфликты: группа, преподаватель или кабинет в двух местах одновременно. Под красной парой написано, почему она красная (например, «кабинет 3108 в это время занят группой 24-БС») и что сделать. Все такие пары собраны в списке «Почему есть красные пары» над расписанием. В окне пары есть подсказки «Как исправить»: свободные кабинеты, свободные преподаватели и свободное время. Ошибку можно отменить кнопкой «Отменить» или Ctrl+Z.</div></li><li><div><b>Скачайте Excel.</b> Кнопка «Excel» скачивает тот же файл, что вы загрузили: те же листы и оформление, изменены только поправленные пары. Если после правок есть конфликты, программа спросит «Вы уверены?». Пока правки не скачаны, вверху висит напоминание.</div></li><li><div><b>Сервис.</b> Список всех правок с кнопкой «Вернуть», занятость любого кабинета на неделю и нагрузка преподавателей.</div></li><li><div><b>Печать.</b> Выберите группу, преподавателя или кабинет и нажмите «Печать / PDF». В окне печати выберите А4 или «Сохранить как PDF».</div></li></ol></div><div class="card"><h3>Важно знать</h3><ul class="help-notes"><li>Файл никуда не отправляется: всё работает в браузере на этом компьютере.</li><li>Если вкладку закрыли, при следующем открытии нажмите «Продолжить» — правки на месте.</li><li>Если программой пользуются несколько человек, у каждого свой экземпляр: правки одного не видны другим. Одну неделю лучше править одному человеку и пересылать скачанный Excel.</li><li>Не открывайте программу в двух вкладках одного браузера одновременно — программа об этом предупредит.</li><li>Галочка «Работа со всеми отделениями» — бета-тестирование для остальных отделений.</li></ul></div></section>`;
+    `<section class="view"><h2 class="ttl">Как пользоваться</h2><div class="card"><ol class="steps"><li><div><b>Загрузите файл.</b> Нажмите «Загрузить файл» и выберите Excel недели (.xlsx) из программы учебной части. Программа сама найдёт нужные группы (${esc(scopeName())}). Если с файлом что-то не так (мало групп, нет дней), вверху появится предупреждение.</div></li><li><div><b>Найдите нужное.</b> Начните вводить группу, фамилию или кабинет в строку поиска и нажмите подсказку, либо выберите в списках группу, преподавателя, кабинет, корпус или день. «Сегодня» и «Завтра» сразу показывают нужный день, «Сбросить фильтры» — всю неделю.</div></li><li><div><b>Поправьте пару.</b> Нажмите на пару: можно сменить преподавателя или кабинет (под кабинетом видно, что это за кабинет и свободен ли он), написать комментарий, перенести пару на свободное место или поменять местами с другой. Пары можно и просто перетаскивать мышкой.</div></li><li><div><b>Преподаватель заболел.</b> В окне пары — «Снять пару (окно)». В «Сервисе» → «Замена преподавателя» можно назначить замену (★ — ведёт тот же предмет) или поставить окно сразу на все его пары за день.</div></li><li><div><b>Следите за красным.</b> Красным выделены конфликты: группа, преподаватель или кабинет в двух местах одновременно. Под красной парой написано, почему она красная (например, «кабинет 3108 в это время занят группой 24-БС») и что сделать. Все такие пары собраны в списке «Почему есть красные пары» над расписанием. В окне пары есть подсказки «Как исправить»: свободные кабинеты, свободные преподаватели и свободное время. Если две группы на самом деле занимаются вместе (сдвоенная пара), нажмите «Сдвоенная — не конфликт»: пара перестанет быть красной, на ней появится отметка «Сдвоенная с …». Ошибку можно отменить кнопкой «Отменить» или Ctrl+Z.</div></li><li><div><b>Скачайте Excel.</b> Кнопка «Excel» скачивает тот же файл, что вы загрузили: те же листы и оформление, изменены только поправленные пары. Если после правок есть конфликты, программа спросит «Вы уверены?». Пока правки не скачаны, вверху висит напоминание.</div></li><li><div><b>Сервис.</b> Список всех правок с кнопкой «Вернуть», занятость любого кабинета на неделю и нагрузка преподавателей.</div></li><li><div><b>Печать.</b> Выберите группу, преподавателя или кабинет и нажмите «Печать / PDF». В окне печати выберите А4 или «Сохранить как PDF».</div></li></ol></div><div class="card"><h3>Важно знать</h3><ul class="help-notes"><li>Файл никуда не отправляется: всё работает в браузере на этом компьютере.</li><li>Если вкладку закрыли, при следующем открытии нажмите «Продолжить» — правки на месте.</li><li>Если программой пользуются несколько человек, у каждого свой экземпляр: правки одного не видны другим. Одну неделю лучше править одному человеку и пересылать скачанный Excel.</li><li>Не открывайте программу в двух вкладках одного браузера одновременно — программа об этом предупредит.</li><li>Галочка «Работа со всеми отделениями» — бета-тестирование для остальных отделений.</li></ul></div></section>`;
 }
 $("import").onclick = () => $("file").click();
 $("file").onchange = async (e) => {
@@ -923,6 +985,7 @@ $("file").onchange = async (e) => {
       const next = Model.initial(data);
       next.layout = data.layout || null;
       next.notes = {};
+      next.combined = [];
       next.settings = state.settings;
       next.departments = state.departments;
       const keep = Object.fromEntries(

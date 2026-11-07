@@ -386,3 +386,6 @@ td.warn-t{color:#b25000;font-weight:600}
 @media print{.les .why{display:none}}
 .link-btn{background:none;border:0;padding:0;color:#0066cc;font:inherit;font-weight:600;cursor:pointer;text-align:left}
 details.card .why-list{color:#3a3a3c}
+.tag.comb{background:#e8f5e9;color:#1b5e20}
+.comb-note{background:#e8f5e9;color:#1b5e20;border-radius:12px;padding:8px 12px;margin:8px 0}
+.why-list .chip{font-size:.8rem;padding:2px 8px;margin-right:4px}
