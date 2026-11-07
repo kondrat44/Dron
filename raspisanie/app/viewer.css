@@ -379,3 +379,10 @@ td.warn-t{color:#b25000;font-weight:600}
 .steps li>div{min-width:0;line-height:1.5;padding-top:3px}
 .help-notes{margin:6px 0 0 18px;padding:0;line-height:1.55;font-size:.92rem;color:var(--ink2)}
 .help-notes li{margin:4px 0}
+.les .why{display:flex;flex-direction:column;gap:3px;margin-top:6px;font-size:.78rem;line-height:1.35;color:#b3261e;text-align:left}
+.les .why .why-fix{color:#6e6e73}
+.why-list{margin:6px 0 0;padding-left:18px;color:#b3261e;font-size:.92rem;line-height:1.45}
+.why-list li{margin:3px 0}
+@media print{.les .why{display:none}}
+.link-btn{background:none;border:0;padding:0;color:#0066cc;font:inherit;font-weight:600;cursor:pointer;text-align:left}
+details.card .why-list{color:#3a3a3c}
