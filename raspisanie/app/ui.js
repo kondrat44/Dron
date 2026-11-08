@@ -612,8 +612,7 @@ function schedule() {
             render();
             return;
           }
-          exchange(a, e.dataset.lesson);
-          notify("Пары обменены. Конфликты подсвечены.");
+          if (exchange(a, e.dataset.lesson) !== false) notify("Пары обменены." + (Tools.unsaved(state) ? " Не забудьте скачать Excel — кнопка «Скачать Excel» стала зелёной." : ""));
         } else editor(e.dataset.lesson);
       }),
   );
@@ -1311,6 +1310,16 @@ function printTable(lessons) {
 }
 
 function exchange(a, b) {
+  const x = state.lessons.find((l) => l.id === a),
+    y = state.lessons.find((l) => l.id === b);
+  if (x && y && x.date === y.date && x.period === y.period) {
+    ui.moving = null;
+    render();
+    notify(
+      "Эти пары идут в одно и то же время, поэтому при обмене ничего не меняется. Чтобы поменять преподавателя или кабинет, нажмите на пару и выберите их в списке.",
+    );
+    return false;
+  }
   const snapshots = Motion.capture([a, b]);
   try {
     commit(() => Model.swap(state.lessons, a, b));
@@ -1349,8 +1358,7 @@ $("main").addEventListener("drop", (e) => {
     e.preventDefault();
     const a = dragged;
     dragged = null;
-    exchange(a, card.dataset.lesson);
-    notify("Пары обменены. Конфликты подсвечены.");
+    if (exchange(a, card.dataset.lesson) !== false) notify("Пары обменены." + (Tools.unsaved(state) ? " Не забудьте скачать Excel — кнопка «Скачать Excel» стала зелёной." : ""));
   }
 });
 $("main").addEventListener("dragend", () => {

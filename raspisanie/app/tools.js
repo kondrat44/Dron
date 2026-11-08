@@ -14,9 +14,14 @@ window.Tools = (() => {
     const mine = st.lessons.filter((l) => !l.cancelled && Model.inScope(l, st.settings));
     const map = {};
     for (const l of mine) map[slotKey(l)] = val(l);
+    const per = {};
+    for (const l of mine) for (const g of l.groups) per[g] = (per[g] || 0) + 1;
+    const dates = [...new Set(mine.map((l) => l.date))].sort();
     return {
       source: st.source,
-      groups: [...new Set(mine.flatMap((l) => l.groups))].length,
+      first: dates[0] || "",
+      per,
+      groups: Object.keys(per).length,
       lessons: mine.length,
       days: [...new Set(mine.map((l) => dayOf(l.date)))].sort(),
       map,
@@ -32,9 +37,29 @@ window.Tools = (() => {
   function afterLoad(st, issues) {
     const now = summary(st);
     const weeks = readWeeks();
-    let prev = weeks.last && weeks.last.source !== now.source ? weeks.last : weeks.prev;
-    if (prev && prev.source === now.source) prev = null;
+    /* та же неделя = то же имя файла и та же первая дата; новое расписание с тем же именем файла тоже сравнивается */
+    const same = (w) => w && w.source === now.source && (w.first || "") === now.first;
+    let prev = weeks.last && !same(weeks.last) ? weeks.last : weeks.prev;
+    if (same(prev)) prev = null;
     const problems = [];
+    /* Группы отделения, которые пропали или почти опустели */
+    const inDep = (g) => Model.inScope({ groups: [g] }, st.settings);
+    const known = new Set([...(weeks.known || []), ...Object.keys((prev && prev.per) || {})].filter(inDep));
+    const headers = new Set(Object.keys(st.layout || {}).map((k) => k.split("|")[1]).filter(Boolean).filter(inDep));
+    const gone = [], empty = [], few = [];
+    for (const g of [...new Set([...known, ...headers])].sort((a, b) => a.localeCompare(b, "ru", { numeric: true }))) {
+      const n = now.per[g] || 0,
+        was = prev && prev.per ? prev.per[g] || 0 : 0;
+      if (!n && headers.has(g)) empty.push(g);
+      else if (!n) gone.push(was ? `${g} — в прошлый раз было ${was} ${was % 10 === 1 && was % 100 !== 11 ? "пара" : [2, 3, 4].includes(was % 10) && ![12, 13, 14].includes(was % 100) ? "пары" : "пар"}` : g);
+      else if (was >= 10 && n < was * 0.5) few.push(`${g}: ${n} вместо ${was}`);
+    }
+    if (now.lessons) {
+      if (empty.length) problems.push((empty.length > 1 ? "у групп " + empty.join(", ") + " в файле нет ни одной пары" : "у группы " + empty[0] + " в файле нет ни одной пары") + ": столбец есть, но пустой");
+      if (gone.length)
+        problems.push((gone.length > 1 ? "в файле нет групп, которые были раньше: " : "в файле нет группы, которая была раньше: ") + gone.join("; ") + ". Если группа на практике или больше не учится — всё в порядке");
+      if (few.length) problems.push((few.length > 1 ? "у групп" : "у группы") + " заметно меньше пар, чем в прошлый раз: " + few.join("; "));
+    }
     if (now.lessons === 0) problems.push("в файле не найдено ни одной пары отделения");
     else {
       if (prev && now.groups < prev.groups * 0.75)
@@ -67,7 +92,10 @@ window.Tools = (() => {
       diff = { prev: prev.source, byGroup };
     }
     try {
-      localStorage.setItem(WEEKS_KEY, JSON.stringify({ prev: prev || weeks.prev || null, last: now }));
+      localStorage.setItem(
+        WEEKS_KEY,
+        JSON.stringify({ prev: prev || weeks.prev || null, last: now, known: [...new Set([...known, ...Object.keys(now.per)])] }),
+      );
     } catch {}
     return { problems, diff };
   }
@@ -113,12 +141,12 @@ window.Tools = (() => {
     JSON.stringify(
       st.lessons
         .filter((l) => Model.changed(l, st.baseline))
-        .map((l) => [l.id, l.date, l.period, l.teacher, l.room, l.subject]),
+        .map((l) => [l.id, l.date, l.period, l.teacher, l.room, l.subject, l.subgroup, !!l.cancelled, !!l.added]),
     );
-  const unsaved = (st) =>
-    !!st.lessons.length &&
-    st.lessons.some((l) => Model.changed(l, st.baseline)) &&
-    sig(st) !== (st.exportedSig || "");
+  /* «есть нескачанные правки» = расписание отличается от последнего скачанного Excel
+     (а до первого скачивания — от загруженного файла). Так кнопка зелёная и после обмена,
+     и после того, как скачанную правку вернули назад. */
+  const unsaved = (st) => !!st.lessons.length && sig(st) !== (st.exportedSig || "[]");
 
   /* ---------- 6. Сегодня / Завтра ---------- */
   function dayFilter(st, shift) {
