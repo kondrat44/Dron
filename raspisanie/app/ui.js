@@ -688,13 +688,14 @@ function close() {
   );
   document.querySelector(`[data-lesson="${ui.editId}"]`)?.focus();
 }
-function editor(id) {
+function editor(id, opt = {}) {
   clearTimeout(ui.closeTimer);
   const l = state.lessons.find((x) => x.id === id);
   ui.editId = id;
   const old = state.baseline.find((x) => x.id === id);
-  if (l.cancelled) {
-    $("sheet").innerHTML = `<h3>Окно</h3><p>${esc(l.groups.join(", "))} · ${esc(new Date(l.date + "T12:00:00").toLocaleDateString("ru", { weekday: "long" }) + ", " + dm(l.date))} · ${pairName(l.period)}${l.subgroup ? " · " + l.subgroup + " подгр." : ""}</p><p>Пара снята: <b>${esc(l.subject)}</b>, ${esc(l.teacher || "без преподавателя")}, ауд. ${esc(l.room || "?")}.</p><p class="hint">В скачанном Excel эта клетка будет пустой, оформление останется.</p>${(state.notes || {})[id] ? `<p class="hint">💬 ${esc(state.notes[id])}</p>` : ""}<div class="actions"><button class="btn blue" id="edit-restore">Вернуть пару</button><button class="btn" id="edit-close">Закрыть</button></div>`;
+  const replacing = !!opt.replace;
+  if (l.cancelled && !opt.replace) {
+    $("sheet").innerHTML = `<h3>Окно</h3><p>${esc(l.groups.join(", "))} · ${esc(new Date(l.date + "T12:00:00").toLocaleDateString("ru", { weekday: "long" }) + ", " + dm(l.date))} · ${pairName(l.period)}${l.subgroup ? " · " + l.subgroup + " подгр." : ""}</p><p>Пара снята: <b>${esc(l.subject)}</b>, ${esc(l.teacher || "без преподавателя")}, ауд. ${esc(l.room || "?")}.</p><p class="hint">В скачанном Excel эта клетка будет пустой, оформление останется.</p>${(state.notes || {})[id] ? `<p class="hint">💬 ${esc(state.notes[id])}</p>` : ""}<div class="actions"><button class="btn blue" id="edit-other">Поставить другую пару</button><button class="btn" id="edit-restore">Вернуть пару</button><button class="btn" id="edit-close">Закрыть</button></div>`;
     $("scrim").hidden = false;
     requestAnimationFrame(() => $("scrim").classList.add("open"));
     $("edit-restore").onclick = () => {
@@ -702,17 +703,18 @@ function editor(id) {
       commit(() => delete l.cancelled);
       notify("Пара возвращена");
     };
+    $("edit-other").onclick = () => editor(id, { replace: true });
     $("edit-close").onclick = close;
     return;
   }
   $("sheet").innerHTML =
-    `<h3>${esc(l.subject)}</h3><p>${esc(l.groups.join(", "))} · ${esc(new Date(l.date + "T12:00:00").toLocaleDateString("ru", { weekday: "long" }) + ", " + dm(l.date))} · ${pairName(l.period)} ${l.subgroup ? "· " + l.subgroup + " подгр." : ""}</p><label class="field" ${l.period === null ? "hidden" : ""}>Преподаватель<input class="inp" id="edit-teacher" autocomplete="off" value="${esc(l.teacher)}"></label><datalist id="teachers">${list(
+    `<h3 id="edit-title">${esc(replacing ? "Другая пара вместо снятой" : l.subject)}</h3><p>${esc(l.groups.join(", "))} · ${esc(new Date(l.date + "T12:00:00").toLocaleDateString("ru", { weekday: "long" }) + ", " + dm(l.date))} · ${pairName(l.period)} ${l.subgroup ? "· " + l.subgroup + " подгр." : ""}</p>${replacing ? `<p class="notice blue" style="padding:10px 14px">Выберите дисциплину, преподавателя и кабинет новой пары и нажмите «Сохранить». В Excel она встанет на место снятой пары с тем же оформлением.</p>` : ""}<label class="field">Дисциплина<input class="inp" id="edit-subject" autocomplete="off" value="${esc(replacing ? "" : l.subject)}" placeholder="например, Математика"></label><label class="field" ${l.period === null ? "hidden" : ""}>Преподаватель<input class="inp" id="edit-teacher" autocomplete="off" value="${esc(replacing ? "" : l.teacher)}"></label><datalist id="teachers">${list(
       "teacher",
     )
       .map((t) => `<option value="${esc(t)}">`)
       .join(
         "",
-      )}</datalist><label class="field">Кабинет<input class="inp" id="edit-room" autocomplete="off" value="${esc(l.room)}"></label><p class="hint" id="room-info"></p><datalist id="rooms">${[
+      )}</datalist><label class="field">Кабинет<input class="inp" id="edit-room" autocomplete="off" value="${esc(replacing ? "" : l.room)}"></label><p class="hint" id="room-info"></p><datalist id="rooms">${[
       ...new Set([...state.rooms, ...list("room")]),
     ]
       .filter(Boolean)
@@ -720,17 +722,24 @@ function editor(id) {
       .map((t) => `<option value="${esc(t)}">${esc(Model.roomInfo(t)?.name || "")}</option>`)
       .join(
         "",
-      )}</datalist><label class="field">Комментарий<input class="inp" id="edit-note" maxlength="200" placeholder="например, замена из-за болезни" value="${esc((state.notes || {})[id] || "")}"></label><p class="hint">Было в файле: ${esc(old?.teacher || "преподаватель не указан")}, ауд. ${esc(old?.room || "не указана")}, ${esc(dm(old?.date))}, ${esc(pairName(old?.period))}</p><div id="edit-conflicts" role="status"></div><div id="fix-box" class="fix-box"></div><div id="move-box" class="fix-box" hidden></div><div class="actions"><button class="btn blue" id="edit-save">Сохранить</button>${l.period === null ? "" : '<button class="btn" id="edit-move">Перенести на свободное место</button>'}<button class="btn danger" id="edit-cancel">Снять пару (окно)</button><button class="btn" id="edit-swap">Обменять с другой парой</button><button class="btn" id="edit-close">Закрыть</button></div>`;
+      )}</datalist><label class="field">Комментарий<input class="inp" id="edit-note" maxlength="200" placeholder="например, замена из-за болезни" value="${esc((state.notes || {})[id] || "")}"></label><p class="hint">Было в файле: ${esc(old?.subject ? old.subject + ", " : "")}${esc(old?.teacher || "преподаватель не указан")}, ауд. ${esc(old?.room || "не указана")}, ${esc(dm(old?.date))}, ${esc(pairName(old?.period))}</p><div id="edit-conflicts" role="status"></div><div id="fix-box" class="fix-box"></div><div id="move-box" class="fix-box" hidden></div><div class="actions">${
+      replacing
+        ? `<button class="btn blue" id="edit-save">Сохранить</button><button class="btn" id="edit-close">${l.cancelled ? "Оставить окно" : "Закрыть"}</button>`
+        : `<button class="btn blue" id="edit-save">Сохранить</button><button class="btn" id="edit-replace">Заменить другой парой</button>${l.period === null ? "" : '<button class="btn" id="edit-move">Перенести на свободное место</button>'}<button class="btn danger" id="edit-cancel">Снять пару (окно)</button><button class="btn" id="edit-swap">Обменять с другой парой</button><button class="btn" id="edit-close">Закрыть</button>`
+    }</div>`;
   $("scrim").hidden = false;
   requestAnimationFrame(() => $("scrim").classList.add("open"));
   const slotText = (x) =>
     `${Tools.DAY[Tools.dayOf(x.date)]} ${dm(x.date)}, ${x.period} пара${x.roomBusy ? " · ауд. " + x.alt : ""}`;
   const typed = () => ({
+    subject: $("edit-subject").value.trim(),
     teacher: $("edit-teacher").value.trim(),
     room: $("edit-room").value.trim(),
     note: $("edit-note").value.trim(),
   });
   const apply = (v, slot) => {
+    if (v.subject) l.subject = v.subject;
+    if (replacing) delete l.cancelled;
     l.teacher = v.teacher;
     l.room = slot?.alt || v.room;
     if (l.room && !state.rooms.includes(l.room)) state.rooms.push(l.room);
@@ -754,6 +763,8 @@ function editor(id) {
   const preview = () => {
     const ls = Model.copy(state.lessons),
       target = ls.find((x) => x.id === id);
+    target.subject = $("edit-subject").value.trim() || target.subject;
+    if (replacing) delete target.cancelled;
     target.teacher = $("edit-teacher").value.trim();
     target.room = $("edit-room").value.trim();
     const conflicts = Model.conflicts(ls, state.settings).filter(
@@ -891,7 +902,7 @@ function editor(id) {
       })
       .sort((a, b) => a.busy - b.busy || b.near - a.near || a.v.localeCompare(b.v, "ru", { numeric: true }));
   };
-  const combo = (inp, items, what) => {
+  const combo = (inp, items, what, onPick) => {
     const wrap = document.createElement("span");
     wrap.className = "combo";
     inp.replaceWith(wrap);
@@ -916,7 +927,7 @@ function editor(id) {
     };
     const open = (full) => { all = full; draw(); box.hidden = false; };
     const shut = () => { box.hidden = true; };
-    const pick = (v) => { inp.value = v; shut(); preview(); };
+    const pick = (v) => { inp.value = v; shut(); if (onPick) onPick(v); preview(); };
     btn.onmousedown = (e) => { e.preventDefault(); if (box.hidden) { inp.focus(); open(true); } else shut(); };
     inp.addEventListener("click", () => box.hidden && open(true));
     inp.addEventListener("input", () => { open(false); preview(); });
@@ -939,17 +950,50 @@ function editor(id) {
       }
     });
   };
+  /* Дисциплины: сначала те, что есть у этой группы (с её преподавателем), потом все остальные */
+  const groupKey = l.groups.join(",");
+  const ofGroup = (s) => state.lessons.filter((x) => x.subject === s && x.groups.join(",") === groupKey && x.teacher);
+  const subjectItems = () => {
+    const mine = [...new Set(state.lessons.filter((x) => x.groups.join(",") === groupKey).map((x) => x.subject).filter(Boolean))];
+    const all = [...new Set(state.lessons.map((x) => x.subject).filter(Boolean))].filter((x) => !mine.includes(x));
+    const usual = (s) => {
+      const c = {};
+      for (const x of ofGroup(s)) c[x.teacher] = (c[x.teacher] || 0) + 1;
+      return Object.entries(c).sort((a, b) => b[1] - a[1])[0]?.[0] || "";
+    };
+    return [
+      ...mine.sort((a, b) => a.localeCompare(b, "ru")).map((v) => ({ v, busy: 0, sub: "у этой группы" + (usual(v) ? " · ведёт " + usual(v) : "") })),
+      ...all.sort((a, b) => a.localeCompare(b, "ru")).map((v) => ({ v, busy: 0, sub: "у других групп" })),
+    ];
+  };
+  combo($("edit-subject"), subjectItems, "дисциплины", (v) => {
+    /* подставить преподавателя и кабинет, которые обычно ведут эту дисциплину у группы */
+    const c = {}, r = {};
+    for (const x of ofGroup(v)) {
+      c[x.teacher] = (c[x.teacher] || 0) + 1;
+      if (x.room) r[x.room] = (r[x.room] || 0) + 1;
+    }
+    const t = Object.entries(c).sort((a, b) => b[1] - a[1])[0]?.[0];
+    const room = Object.entries(r).sort((a, b) => b[1] - a[1])[0]?.[0];
+    if (t) $("edit-teacher").value = t;
+    if (room && (replacing || !$("edit-room").value.trim())) $("edit-room").value = room;
+  });
   combo($("edit-teacher"), teacherItems, "преподаватели");
   combo($("edit-room"), roomItems, "кабинеты");
   preview();
   $("edit-save").onclick = () => {
     const v = typed();
+    if (!v.subject) {
+      notify("Впишите или выберите дисциплину");
+      $("edit-subject").focus();
+      return;
+    }
     close();
     commit(() => apply(v));
     const c = analysis.filter((x) => x.ids.includes(id) && notCombined(x));
     notify(c.length ? "Сохранено, но у пары есть пересечение: " + [...new Set(c.flatMap((x) => x.types))].join(", ").toLowerCase() + ". Пара подсвечена красным, причина — в окне пары" : "Сохранено");
   };
-  $("edit-cancel").onclick = () => {
+  if ($("edit-cancel")) $("edit-cancel").onclick = () => {
     const v = typed();
     close();
     commit(() => {
@@ -973,13 +1017,17 @@ function editor(id) {
       bindSlots(box, slots);
       box.scrollIntoView({ block: "nearest", behavior: "smooth" });
     };
-  $("edit-swap").onclick = () => {
+  if ($("edit-swap")) $("edit-swap").onclick = () => {
     close();
     ui.moving = id;
     render();
   };
   $("edit-close").onclick = close;
-  if (l.period !== null) $("edit-teacher").focus();
+  if ($("edit-replace"))
+    $("edit-replace").onclick = () => editor(id, { replace: true });
+  $("edit-subject").addEventListener("input", () => ($("edit-title").textContent = $("edit-subject").value.trim() || (replacing ? "Другая пара вместо снятой" : l.subject)));
+  if (replacing) $("edit-subject").focus();
+  else if (l.period !== null) $("edit-teacher").focus();
 }
 function refs() {
   const groups = list("group");
@@ -1140,7 +1188,7 @@ function settings() {
 }
 function help() {
   $("main").innerHTML =
-    `<section class="view"><h2 class="ttl">Как пользоваться</h2><div class="card"><ol class="steps"><li><div><b>Загрузите файл.</b> Нажмите «Загрузить файл» и выберите Excel недели (.xlsx) из программы учебной части. Программа сама найдёт нужные группы (${esc(scopeName())}). Если с файлом что-то не так (мало групп, нет дней), вверху появится предупреждение.</div></li><li><div><b>Найдите нужное.</b> Начните вводить группу, фамилию или кабинет в строку поиска и нажмите подсказку, либо выберите в списках группу, преподавателя, кабинет, корпус или день. Кнопки дней «Пн», «Вт», «Ср» … над расписанием показывают один день у всех групп, «Вся неделя» — снова всю неделю. «Сегодня» и «Завтра» сразу показывают нужный день, «Сбросить фильтры» — всю неделю.</div></li><li><div><b>Поправьте пару.</b> Нажмите на пару: можно сменить преподавателя или кабинет — нажмите на поле или на ▾, откроется весь список с пометкой «свободен» или «занят», или впишите любую фамилию или кабинет сами. Если будет пересечение, программа скажет об этом, но сохранить всё равно можно. Под кабинетом видно, что это за кабинет и свободен ли он. Можно написать комментарий, перенести пару на свободное место или поменять местами с другой. Пары можно и просто перетаскивать мышкой.</div></li><li><div><b>Добавьте пару.</b> Кнопка «+ Добавить пару» ставит новую пару в пустую клетку: выберите группу, день, номер пары, всю группу или подгруппу, дисциплину, преподавателя и кабинет. Программа сразу скажет, нет ли пересечений. В Excel новая пара будет оформлена так же, как остальные.</div></li><li><div><b>Преподаватель заболел.</b> В окне пары — «Снять пару (окно)». В «Сервисе» → «Замена преподавателя» можно назначить замену (★ — ведёт тот же предмет) или поставить окно сразу на все его пары за день.</div></li><li><div><b>Следите за красным.</b> Красным выделены конфликты: группа, преподаватель или кабинет в двух местах одновременно. Под красной парой написано, почему она красная (например, «кабинет 3108 в это время занят группой 24-БС») и что сделать. Все такие пары собраны в списке «Почему есть красные пары» над расписанием. В окне пары есть подсказки «Как исправить»: свободные кабинеты, свободные преподаватели и свободное время. Если две группы на самом деле занимаются вместе (сдвоенная пара), нажмите «Сдвоенная — не конфликт»: пара перестанет быть красной, на ней появится отметка «Сдвоенная с …». Ошибку можно отменить кнопкой «Отменить» или Ctrl+Z.</div></li><li><div><b>Скачайте Excel.</b> После правок нажмите зелёную кнопку «⬇ Скачать Excel» вверху (пока правки не скачаны, она зелёная и мигает). Она скачивает тот же файл, что вы загрузили: те же листы и оформление, изменены только поправленные пары. Если после правок есть конфликты, программа спросит «Вы уверены?». Пока правки не скачаны, вверху висит напоминание.</div></li><li><div><b>Сервис.</b> Список всех правок с кнопкой «Вернуть», занятость любого кабинета на неделю, нагрузка преподавателей, окна у групп и лист преподавателя на неделю — его можно распечатать или сохранить в PDF и отдать преподавателю.</div></li><li><div><b>Таблица.</b> Переключатель «Карточки / Таблица» над расписанием. В таблице, как в Excel учебной части, строки — дни и пары, столбцы — группы. Нажмите на пару, чтобы её поправить, или на «+» в пустой клетке, чтобы добавить пару.</div></li><li><div><b>Кто свободен и массовые правки.</b> В «Сервисе»: «Кто свободен» показывает на выбранные день и пару свободных преподавателей и кабинеты. «Массовые правки» меняют сразу много пар: заменить преподавателя на неделю или день, перевести группу в другой кабинет.</div></li><li><div><b>Цвета и тема.</b> Цвет полоски слева на паре — корпус: синий — 1, зелёный — 2, оранжевый — 3, фиолетовый — спортзал и другое. Тему меняет кнопка с луной или солнцем вверху, а в «Настройках» можно выбрать «Как в системе».</div></li><li><div><b>Печать.</b> Выберите группу, преподавателя или кабинет и нажмите «Печать / PDF». В окне печати выберите А4 или «Сохранить как PDF».</div></li></ol></div><div class="card"><h3>Важно знать</h3><ul class="help-notes"><li>Файл никуда не отправляется: всё работает в браузере на этом компьютере.</li><li>Если вкладку закрыли, при следующем открытии нажмите «Продолжить» — правки на месте.</li><li>Если программой пользуются несколько человек, у каждого свой экземпляр: правки одного не видны другим. Одну неделю лучше править одному человеку и пересылать скачанный Excel.</li><li>Не открывайте программу в двух вкладках одного браузера одновременно — программа об этом предупредит.</li><li>Галочка «Работа со всеми отделениями» — бета-тестирование для остальных отделений.</li></ul></div></section>`;
+    `<section class="view"><h2 class="ttl">Как пользоваться</h2><div class="card"><ol class="steps"><li><div><b>Загрузите файл.</b> Нажмите «Загрузить файл» и выберите Excel недели (.xlsx) из программы учебной части. Программа сама найдёт нужные группы (${esc(scopeName())}). Если с файлом что-то не так (мало групп, нет дней), вверху появится предупреждение.</div></li><li><div><b>Найдите нужное.</b> Начните вводить группу, фамилию или кабинет в строку поиска и нажмите подсказку, либо выберите в списках группу, преподавателя, кабинет, корпус или день. Кнопки дней «Пн», «Вт», «Ср» … над расписанием показывают один день у всех групп, «Вся неделя» — снова всю неделю. «Сегодня» и «Завтра» сразу показывают нужный день, «Сбросить фильтры» — всю неделю.</div></li><li><div><b>Поправьте пару.</b> Нажмите на пару: можно сменить преподавателя или кабинет — нажмите на поле или на ▾, откроется весь список с пометкой «свободен» или «занят», или впишите любую фамилию или кабинет сами. Если будет пересечение, программа скажет об этом, но сохранить всё равно можно. Под кабинетом видно, что это за кабинет и свободен ли он. Можно написать комментарий, перенести пару на свободное место или поменять местами с другой. Чтобы поставить вместо пары совсем другую, нажмите «Заменить другой парой» (или у снятой пары — «Поставить другую пару») и выберите дисциплину — преподаватель и кабинет подставятся сами, их можно поменять. Пары можно и просто перетаскивать мышкой.</div></li><li><div><b>Добавьте пару.</b> Кнопка «+ Добавить пару» ставит новую пару в пустую клетку: выберите группу, день, номер пары, всю группу или подгруппу, дисциплину, преподавателя и кабинет. Программа сразу скажет, нет ли пересечений. В Excel новая пара будет оформлена так же, как остальные.</div></li><li><div><b>Преподаватель заболел.</b> В окне пары — «Снять пару (окно)». В «Сервисе» → «Замена преподавателя» можно назначить замену (★ — ведёт тот же предмет) или поставить окно сразу на все его пары за день.</div></li><li><div><b>Следите за красным.</b> Красным выделены конфликты: группа, преподаватель или кабинет в двух местах одновременно. Под красной парой написано, почему она красная (например, «кабинет 3108 в это время занят группой 24-БС») и что сделать. Все такие пары собраны в списке «Почему есть красные пары» над расписанием. В окне пары есть подсказки «Как исправить»: свободные кабинеты, свободные преподаватели и свободное время. Если две группы на самом деле занимаются вместе (сдвоенная пара), нажмите «Сдвоенная — не конфликт»: пара перестанет быть красной, на ней появится отметка «Сдвоенная с …». Ошибку можно отменить кнопкой «Отменить» или Ctrl+Z.</div></li><li><div><b>Скачайте Excel.</b> После правок нажмите зелёную кнопку «⬇ Скачать Excel» вверху (пока правки не скачаны, она зелёная и мигает). Она скачивает тот же файл, что вы загрузили: те же листы и оформление, изменены только поправленные пары. Если после правок есть конфликты, программа спросит «Вы уверены?». Пока правки не скачаны, вверху висит напоминание.</div></li><li><div><b>Сервис.</b> Список всех правок с кнопкой «Вернуть», занятость любого кабинета на неделю, нагрузка преподавателей, окна у групп и лист преподавателя на неделю — его можно распечатать или сохранить в PDF и отдать преподавателю.</div></li><li><div><b>Таблица.</b> Переключатель «Карточки / Таблица» над расписанием. В таблице, как в Excel учебной части, строки — дни и пары, столбцы — группы. Нажмите на пару, чтобы её поправить, или на «+» в пустой клетке, чтобы добавить пару.</div></li><li><div><b>Кто свободен и массовые правки.</b> В «Сервисе»: «Кто свободен» показывает на выбранные день и пару свободных преподавателей и кабинеты. «Массовые правки» меняют сразу много пар: заменить преподавателя на неделю или день, перевести группу в другой кабинет.</div></li><li><div><b>Цвета и тема.</b> Цвет полоски слева на паре — корпус: синий — 1, зелёный — 2, оранжевый — 3, фиолетовый — спортзал и другое. Тему меняет кнопка с луной или солнцем вверху, а в «Настройках» можно выбрать «Как в системе».</div></li><li><div><b>Печать.</b> Выберите группу, преподавателя или кабинет и нажмите «Печать / PDF». В окне печати выберите А4 или «Сохранить как PDF».</div></li></ol></div><div class="card"><h3>Важно знать</h3><ul class="help-notes"><li>Файл никуда не отправляется: всё работает в браузере на этом компьютере.</li><li>Если вкладку закрыли, при следующем открытии нажмите «Продолжить» — правки на месте.</li><li>Если программой пользуются несколько человек, у каждого свой экземпляр: правки одного не видны другим. Одну неделю лучше править одному человеку и пересылать скачанный Excel.</li><li>Не открывайте программу в двух вкладках одного браузера одновременно — программа об этом предупредит.</li><li>Галочка «Работа со всеми отделениями» — бета-тестирование для остальных отделений.</li></ul></div></section>`;
 }
 $("import").onclick = () => $("file").click();
 $("file").onchange = async (e) => {
@@ -1178,7 +1226,7 @@ $("file").onchange = async (e) => {
     render();
     const mine = data.lessons.filter(scope);
     if (ui.loadNotes.problems.length)
-      notify("Похоже, с файлом что-то не так: " + ui.loadNotes.problems[0] + ". Подробнее — вверху расписания.");
+      notify("Похоже, с файлом что-то не так: " + ui.loadNotes.problems[0] + (ui.loadNotes.problems.length > 1 ? ` (и ещё замечаний: ${ui.loadNotes.problems.length - 1})` : "") + ". Подробнее — вверху расписания.");
     else if (!mine.length)
       notify(
         `Загружено ${data.lessons.length} занятий, но групп «${scopeName()}» в файле не найдено. Проверьте шаблон групп в «Настройках».`,
