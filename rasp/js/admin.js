@@ -9,11 +9,27 @@ window.Admin = (() => {
   const key = () => U.LS.get("rasp-key");
 
   async function gh(path, opt = {}, k) {
-    const r = await fetch(API + path, {
-      ...opt,
-      cache: "no-store",
-      headers: { Authorization: "Bearer " + (k || key()), Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", ...(opt.headers || {}) },
-    });
+    const stop = new AbortController();
+    const timer = setTimeout(() => stop.abort(), 45000);
+    let r;
+    try {
+      r = await fetch(API + path, {
+        ...opt,
+        cache: "no-store",
+        signal: stop.signal,
+        headers: {
+          Authorization: "Bearer " + (k || key()),
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+          ...(opt.body ? { "Content-Type": "application/json" } : {}),
+          ...(opt.headers || {}),
+        },
+      });
+    } catch {
+      throw Error("Нет связи с GitHub — проверьте интернет");
+    } finally {
+      clearTimeout(timer);
+    }
     if (r.status === 401) throw Object.assign(Error("Ключ не подходит или отключён"), { code: 401 });
     if (r.status === 403) throw Object.assign(Error("У ключа нет права менять расписание"), { code: 403 });
     return r;
