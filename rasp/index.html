@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ru" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Расписание КузТАГиС</title>
+    <meta name="description" content="Расписание занятий КузТАГиС для студентов и преподавателей" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Расписание" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="manifest" href="manifest.webmanifest?v=20261111054958" />
+    <link rel="icon" href="icons/logo.svg?v=20261111054958" />
+    <link rel="apple-touch-icon" href="icons/apple-180.png?v=20261111054958" />
+    <link rel="stylesheet" href="css/app.css?v=20261111054958" />
+    <script>
+      try {
+        var t = localStorage.getItem("rasp-theme");
+        if (t === "dark") document.documentElement.dataset.theme = "dark";
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <header class="top">
+      <div class="top-in">
+        <a class="brand" href="./" aria-label="Расписание КузТАГиС">
+          <img src="icons/logo.svg?v=20261111054958" alt="" width="36" height="36" />
+          <span><b>Расписание</b><small>КузТАГиС</small></span>
+        </a>
+        <div class="top-actions">
+          <button class="who" id="who-btn" type="button" aria-haspopup="dialog">Выбрать</button>
+          <button class="icon-btn" id="theme-btn" type="button" aria-label="Сменить тему" title="Сменить тему">
+            <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.6A8.5 8.5 0 0 1 9.4 3.5a8.5 8.5 0 1 0 11.1 11.1Z" /></svg>
+            <svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2" /><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6" /></svg>
+          </button>
+        </div>
+      </div>
+    </header>
+    <main id="app" class="app" aria-live="polite">
+      <p class="loading">Загружаю расписание…</p>
+    </main>
+    <div class="scrim" id="scrim" hidden>
+      <div class="sheet" id="sheet" role="dialog" aria-modal="true" tabindex="-1"></div>
+    </div>
+    <div id="toast" class="toast" role="status" hidden></div>
+    <noscript><p style="padding: 24px">Для просмотра расписания включите JavaScript.</p></noscript>
+    <script src="js/config.js?v=20261111054958"></script>
+    <script src="js/pack.js?v=20261111054958"></script>
+    <script src="js/app.js?v=20261111054958"></script>
+  </body>
+</html>
