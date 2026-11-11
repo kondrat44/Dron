@@ -508,7 +508,12 @@
       return Uint8Array.from(atob(s + "===".slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
     },
     async send(path, body) {
-      const r = await fetch(C.push + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      let r = null;
+      try {
+        r = await fetch(C.push + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      } catch {}
+      /* сервер упал (у Cloudflare без нужных заголовков — iPhone пишет «Load failed») или нет сети */
+      if (!r || r.status >= 500) throw Error(navigator.onLine === false ? "нет интернета" : "сервер уведомлений сейчас недоступен. Попробуйте позже");
       if (!r.ok) throw Error("сервер уведомлений ответил " + r.status);
     },
     async sub() {
