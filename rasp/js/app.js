@@ -291,6 +291,7 @@
     app.innerHTML =
       (S.offline ? '<div class="note">Нет интернета — показано сохранённое расписание.</div>' : "") +
       installNote() +
+      pushNote() +
       (showBanner
         ? `<section class="banner" aria-label="Изменения в расписании"><h2>Изменения в расписании</h2><ul>${ch
             .slice(0, 6)
@@ -373,7 +374,7 @@
   function foot(w) {
     return `<footer class="foot">${w ? `<p>Расписание от ${esc(whenText(w.cur.publishedAt))}</p>` : ""}<div class="foot-actions"><button class="btn" id="refresh">Обновить</button>${
       S.who ? '<button class="btn" id="change-who">Сменить группу</button>' : ""
-    }</div><button class="link" id="admin-link">Вход для учебной части</button></footer>`;
+    }</div>${pushFoot()}<button class="link" id="admin-link">Вход для учебной части</button></footer>`;
   }
   function bindFoot() {
     if ($("refresh"))
@@ -384,6 +385,7 @@
       };
     if ($("change-who")) $("change-who").onclick = () => picker();
     if ($("admin-link")) $("admin-link").onclick = () => admin();
+    bindPush();
   }
 
   /* ---------- установка на экран ---------- */
@@ -487,6 +489,7 @@
           LS.set("rasp-who", JSON.stringify(S.who));
           LS.set("rasp-recent", JSON.stringify([S.who, ...LS.json("rasp-recent", []).filter((x) => !(x.type === S.who.type && x.v === S.who.v))].slice(0, 4)));
           S.userPicked = false;
+          if (Push.on()) Push.sync();
           compute();
           closeSheet();
           render();
@@ -494,6 +497,107 @@
         }),
     );
   }
+
+  /* ---------- уведомления о заменах (Web Push, сервер — папка push/) ---------- */
+  const Push = {
+    can: () => !!(C.push && C.pushKey && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window && window.isSecureContext),
+    state: () => LS.json("rasp-push", null),
+    on: () => Push.can() && !!Push.state() && Notification.permission === "granted",
+    key: () => {
+      const s = C.pushKey.replace(/-/g, "+").replace(/_/g, "/");
+      return Uint8Array.from(atob(s + "===".slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
+    },
+    async send(path, body) {
+      const r = await fetch(C.push + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      if (!r.ok) throw Error("сервер уведомлений ответил " + r.status);
+    },
+    async sub() {
+      const reg = await Promise.race([navigator.serviceWorker.ready, new Promise((_, bad) => setTimeout(() => bad(Error("приложение ещё загружается, попробуйте через минуту")), 10000))]);
+      return (await reg.pushManager.getSubscription()) || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: Push.key() }));
+    },
+    async enable() {
+      try {
+        const perm = await Notification.requestPermission();
+        if (perm !== "granted") {
+          toast(perm === "denied" ? "Уведомления запрещены. Разрешите их в настройках браузера." : "Уведомления не включены");
+          return render();
+        }
+        const sub = await Push.sub();
+        await Push.send("/sub", { sub: sub.toJSON(), who: S.who });
+        LS.set("rasp-push", JSON.stringify({ who: S.who, at: Date.now() }));
+        toast("Уведомления включены: " + S.who.v);
+      } catch (e) {
+        toast("Не получилось включить уведомления: " + (e.message || e));
+      }
+      render();
+    },
+    async disable() {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) {
+          await Push.send("/unsub", { endpoint: sub.endpoint }).catch(() => {});
+          await sub.unsubscribe();
+        }
+      } catch {}
+      LS.set("rasp-push", null);
+      toast("Уведомления выключены");
+      render();
+    },
+    /* при смене группы и раз в 3 дня — напомнить серверу о подписке */
+    async sync() {
+      try {
+        const sub = await Push.sub();
+        await Push.send("/sub", { sub: sub.toJSON(), who: S.who });
+        LS.set("rasp-push", JSON.stringify({ who: S.who, at: Date.now() }));
+      } catch {}
+    },
+  };
+  function pushFoot() {
+    if (!S.who) return "";
+    if (isIos() && !standalone()) return '<p class="push-line">🔔 Уведомления о заменах на iPhone: добавьте сайт на экран «Домой» и откройте оттуда.</p>';
+    if (!Push.can()) return "";
+    if (Notification.permission === "denied") return '<p class="push-line">🔔 Уведомления о заменах запрещены в настройках браузера для этого сайта.</p>';
+    if (Push.on()) return `<p class="push-line">🔔 Уведомления о заменах включены: ${esc(S.who.v)}. <button class="link" id="push-test">Проверить</button> · <button class="link" id="push-off">Выключить</button></p>`;
+    return '<div class="foot-actions"><button class="btn blue" id="push-on">🔔 Уведомления о заменах</button></div>';
+  }
+  function pushNote() {
+    if (!S.who || !Push.can() || Push.on() || Notification.permission === "denied" || LS.get("rasp-push-hint")) return "";
+    if (isIos() && !standalone()) return "";
+    return `<div class="note install push-note"><p><b>Уведомления о заменах</b> — телефон сообщит, если у ${S.who.type === "g" ? "группы " : ""}${esc(S.who.v)} поменяются пары.</p><button class="btn blue" id="push-on2">Включить</button><button class="x-btn" id="push-x" aria-label="Скрыть">×</button></div>`;
+  }
+  function bindPush() {
+    for (const id of ["push-on", "push-on2"])
+      if ($(id))
+        $(id).onclick = () => {
+          $(id).disabled = true;
+          Push.enable();
+        };
+    if ($("push-off")) $("push-off").onclick = () => Push.disable();
+    if ($("push-test"))
+      $("push-test").onclick = async () => {
+        try {
+          const sub = await Push.sub();
+          const r = await fetch(C.push + "/check", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: sub.endpoint }) });
+          if (r.status === 404) {
+            await Push.sync();
+            return toast("Подписка обновлена — нажмите «Проверить» ещё раз");
+          }
+          toast(r.ok ? "Отправлено пробное уведомление — должно прийти в течение минуты" : r.status === 429 ? "Проверять можно раз в минуту" : "Сервер уведомлений ответил " + r.status);
+        } catch (e) {
+          toast("Не получилось: " + (e.message || e));
+        }
+      };
+    if ($("push-x"))
+      $("push-x").onclick = () => {
+        LS.set("rasp-push-hint", "hidden");
+        render();
+      };
+  }
+  if ("serviceWorker" in navigator)
+    navigator.serviceWorker.addEventListener("message", (e) => {
+      if (e.data === "rasp-reload") load(true);
+    });
 
   /* вход учебной части: код подгружается только по нажатию */
   let adminLoading = null;
@@ -574,6 +678,8 @@
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(() => {});
   window.Rasp = { load, render, picker, admin, toast };
   load(true).then(() => {
+    const ps = Push.state();
+    if (Push.on() && S.who && (Date.now() - ps.at > 3 * 86400e3 || JSON.stringify(ps.who) !== JSON.stringify(S.who))) Push.sync();
     if (S.weeks.length && !S.who) picker();
     if (location.hash === "#admin") admin();
   });

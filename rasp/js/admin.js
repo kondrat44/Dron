@@ -73,7 +73,18 @@ window.Admin = (() => {
   }
 
   /* ---------- проверки файла ---------- */
-  /* mode: "new" — расписание на неделю, которой ещё нет на сайте; "edit" — исправленный файл уже опубликованной недели */
+  /* mode: "new" — расписание на неделю, которой ещё нет на сайте (видно сразу);
+     "edit" — исправленный файл уже опубликованной недели (студенты увидят в C.hour:00);
+     "urgent" — срочные изменения уже опубликованной недели (видно сразу) */
+  const MODE = { new: "Новое расписание", edit: "Изменить расписание", urgent: "Срочные изменения расписания" };
+  const isChange = (m) => m === "edit" || m === "urgent";
+  /* когда студенты увидят публикацию */
+  function visibleFrom(mode, n) {
+    if (mode !== "edit") return new Date(n);
+    const t = new Date(n);
+    t.setHours(C.hour, 0, 0, 0);
+    return t > n ? t : new Date(n); // уже позже C.hour:00 — показываем сразу
+  }
   function inspect(data, file, mode) {
     const lessons = data.lessons;
     const groups = [...new Set(lessons.flatMap((l) => l.groups))];
@@ -106,16 +117,16 @@ window.Admin = (() => {
     const wk = dates.length ? U.dm(dates[0]) + "–" + U.dm(dates[dates.length - 1]) : "";
     if (!stop.length && mode === "new" && same) {
       stop.push(`Расписание на неделю ${wk} уже опубликовано. Если это исправленный файл этой недели — опубликуйте его как изменение.`);
-      switchTo = "edit";
+      switchTo = ["edit", "urgent"];
     }
-    if (!stop.length && mode === "edit" && !same) {
+    if (!stop.length && isChange(mode) && !same) {
       stop.push(`Неделя ${wk} ещё не опубликована — изменять нечего. Если это расписание на новую неделю — опубликуйте его как новое.`);
-      switchTo = "new";
+      switchTo = ["new"];
     }
     if (!stop.length && same) {
       const n = U.now().toISOString();
       diff = Pack.diff(Pack.unpack(same), Pack.unpack(Pack.edition(data, { id: "draft", publishedAt: n, visibleFrom: n })));
-      if (mode === "edit" && !diff.length) stop.push("Этот файл ничем не отличается от опубликованного расписания недели " + wk + ". Публиковать нечего.");
+      if (isChange(mode) && !diff.length) stop.push("Этот файл ничем не отличается от последнего загруженного расписания недели " + wk + ". Публиковать нечего.");
     }
     return { groups, dates, week, stop, warn, same, switchTo, diff };
   }
@@ -164,11 +175,11 @@ window.Admin = (() => {
     U.openSheet(
       head("Учебная часть") +
         (note ? `<div class="card ${note.cls}"><p>${note.text}</p></div>` : "") +
-        `<p>Сохраните Excel недели в программе учебной части, как обычно, и выберите, что делаете.</p><input type="file" id="adm-file" accept=".xlsx" hidden><div class="modes"><button class="mode blue" id="adm-new" ${
-          published ? "" : "disabled"
-        }><b>Новое расписание</b><small>Расписание на новую неделю</small></button><button class="mode" id="adm-edit" ${
+        `<p>Сохраните Excel недели в программе учебной части, как обычно, и выберите, что делаете.</p><input type="file" id="adm-file" accept=".xlsx" hidden><div class="modes"><button class="mode blue" id="adm-new" ${published ? "" : "disabled"}><b>Новое расписание</b><small>На новую неделю. Студенты увидят сразу</small></button><button class="mode" id="adm-edit" ${
           published && eds.length ? "" : "disabled"
-        }><b>Изменить расписание</b><small>Исправленный файл уже опубликованной недели. Студенты увидят «Изменения в расписании»</small></button></div><div id="adm-draft"></div>` +
+        }><b>Изменить расписание</b><small>Исправленный файл этой недели. Студенты увидят сегодня в ${C.hour}:00</small></button><button class="mode urgent" id="adm-urgent" ${
+          published && eds.length ? "" : "disabled"
+        }><b>Срочные изменения расписания</b><small>Исправленный файл этой недели. Студенты увидят сразу</small></button></div><div id="adm-draft"></div>` +
         `<details class="card" ${eds.length ? "open" : ""}><summary>Опубликовано сейчас: ${eds.length}</summary>${
           eds.length
             ? eds
@@ -190,14 +201,11 @@ window.Admin = (() => {
       U.toast("Ключ стёрт с этого компьютера");
     };
     let mode = "new";
-    U.$("adm-new").onclick = () => {
-      mode = "new";
-      U.$("adm-file").click();
-    };
-    U.$("adm-edit").onclick = () => {
-      mode = "edit";
-      U.$("adm-file").click();
-    };
+    for (const m of Object.keys(MODE))
+      U.$("adm-" + m).onclick = () => {
+        mode = m;
+        U.$("adm-file").click();
+      };
     U.$("adm-file").onchange = (e) => {
       const f = e.target.files[0];
       e.target.value = "";
@@ -244,8 +252,8 @@ window.Admin = (() => {
     if (!box || !draft) return;
     const { data, name, info, mode } = draft;
     const n = U.now();
-    const canEvening = n.getHours() < C.hour;
-    const evening = canEvening && mode !== "edit"; // изменение по умолчанию показываем сразу
+    const from = visibleFrom(mode, n);
+    const later = from > n;
     const teachers = new Set(data.lessons.map((l) => l.teacher).filter(Boolean)).size;
     let diffHtml = "";
     if (info.diff && !info.stop.length) {
@@ -264,27 +272,37 @@ window.Admin = (() => {
         : '<div class="card"><p>Отличий от уже опубликованного расписания этой недели нет.</p></div>';
     } else if (!info.stop.length) diffHtml = '<div class="card"><p>Это новая неделя: раньше её не публиковали.</p></div>';
     box.innerHTML =
-      `<p class="sub-h">${mode === "edit" ? "Изменить расписание" : "Новое расписание"}</p><div class="card ${info.stop.length ? "bad" : "ok"}"><h3>${U.esc(name)}</h3>${
+      `<p class="sub-h">${MODE[mode]}</p><div class="card ${info.stop.length ? "bad" : "ok"}"><h3>${U.esc(name)}</h3>${
         info.stop.length
           ? info.stop.map((x) => `<p>${U.esc(x)}</p>`).join("") +
-            (info.switchTo ? `<div class="actions"><button class="btn blue" id="adm-switch">${info.switchTo === "edit" ? "Опубликовать как изменение" : "Опубликовать как новое"}</button></div>` : "")
+            (info.switchTo
+              ? `<div class="actions">${info.switchTo
+                  .map((m) => `<button class="btn${m === "urgent" ? " red" : " blue"}" data-switch="${m}">${m === "edit" ? `Изменить (студенты увидят в ${C.hour}:00)` : m === "urgent" ? "Срочные изменения (сразу)" : "Опубликовать как новое"}</button>`)
+                  .join("")}</div>`
+              : "")
           : `<p>Неделя ${U.esc(U.dm(info.dates[0]))}–${U.esc(U.dm(info.dates[info.dates.length - 1]))} · групп: ${info.groups.length} · преподавателей: ${teachers} · занятий: ${data.lessons.length}</p>`
       }</div>` +
       (info.warn.length ? `<div class="card warn"><h3>Проверьте</h3><ul>${info.warn.map((x) => `<li>${U.esc(x)}</li>`).join("")}</ul></div>` : "") +
       diffHtml +
       (info.stop.length
         ? ""
-        : `<div class="choice" role="radiogroup" aria-label="Когда показать студентам"><label><input type="radio" name="adm-when" value="now" ${evening ? "" : "checked"}> <span>Показать сразу</span></label><label><input type="radio" name="adm-when" value="evening" ${
-            canEvening ? (evening ? "checked" : "") : "disabled"
-          }> <span>Показать студентам сегодня в ${C.hour}:00${canEvening ? "" : " (уже позже " + C.hour + ":00)"}</span></label></div>${
+        : `<div class="card when"><p id="adm-when">${
+            later
+              ? `Студенты увидят сегодня в <b>${C.hour}:00</b>. Если нужно раньше — нажмите «Срочные изменения расписания».`
+              : mode === "edit"
+                ? `Уже позже ${C.hour}:00 — студенты увидят сразу.`
+                : "Студенты увидят <b>сразу</b>, через 1–2 минуты."
+          }</p></div>${
             info.warn.length ? '<div class="choice"><label><input type="checkbox" id="adm-sure"> <span>Я проверил замечания, файл правильный</span></label></div>' : ""
-          }<div class="actions"><button class="btn blue" id="adm-publish" ${info.warn.length ? "disabled" : ""}>${mode === "edit" ? "Опубликовать изменения" : "Опубликовать"}</button><button class="btn" id="adm-cancel">Отмена</button></div>`);
-    if (U.$("adm-switch"))
-      U.$("adm-switch").onclick = () => {
-        draft.mode = info.switchTo;
-        draft.info = inspect(data, published && published.file, draft.mode);
-        showDraft();
-      };
+          }<div class="actions"><button class="btn blue" id="adm-publish" ${info.warn.length ? "disabled" : ""}>${mode === "urgent" ? "Опубликовать срочно" : isChange(mode) ? "Опубликовать изменения" : "Опубликовать"}</button><button class="btn" id="adm-cancel">Отмена</button></div>`);
+    box.querySelectorAll("[data-switch]").forEach(
+      (b) =>
+        (b.onclick = () => {
+          draft.mode = b.dataset.switch;
+          draft.info = inspect(data, published && published.file, draft.mode);
+          showDraft();
+        }),
+    );
     if (info.stop.length) box.insertAdjacentHTML("beforeend", '<div class="actions"><button class="btn" id="adm-cancel">Отмена</button></div>');
     if (U.$("adm-sure")) U.$("adm-sure").onchange = () => (U.$("adm-publish").disabled = !U.$("adm-sure").checked);
     if (U.$("adm-cancel"))
@@ -297,33 +315,33 @@ window.Admin = (() => {
   }
   async function publish() {
     const btn = U.$("adm-publish");
-    const evening = document.querySelector('input[name="adm-when"]:checked').value === "evening";
+    const label0 = btn.textContent;
     btn.disabled = true;
     btn.textContent = "Публикую…";
     const n = U.now();
-    const from = new Date(n);
-    if (evening) from.setHours(C.hour, 0, 0, 0);
-    const ed = Pack.edition(draft.data, { id: n.getTime().toString(36), publishedAt: n.toISOString(), visibleFrom: from.toISOString() });
+    const from = visibleFrom(draft.mode, n);
+    const later = from > n;
+    const ed = Pack.edition(draft.data, { id: n.getTime().toString(36), publishedAt: n.toISOString(), visibleFrom: from.toISOString(), kind: draft.mode });
     const label = edLabel(ed);
     try {
       for (let attempt = 0; ; attempt++) {
         const cur = await readPublished();
         try {
-          await writePublished(Pack.merge(cur.file, ed, n.toLocaleDateString("sv")), cur.sha, `Расписание: ${label.toLowerCase()} (${draft.name})`);
+          await writePublished(Pack.merge(cur.file, ed, n.toLocaleDateString("sv")), cur.sha, `Расписание: ${MODE[draft.mode].toLowerCase()}, ${label.toLowerCase()} (${draft.name})`);
           break;
         } catch (e) {
           if (e.code !== 409 || attempt >= 2) throw e;
         }
       }
-      const wasEdit = draft.mode === "edit";
+      const m = draft.mode;
       draft = null;
       await U.reload();
       main({
         cls: "ok",
         text:
-          `<b>Опубликовано: ${U.esc(label)}${wasEdit ? " (изменение)" : ""}.</b> ` +
-          (evening ? `Студенты увидят сегодня в ${C.hour}:00.` : "У студентов появится через 1–2 минуты.") +
-          (wasEdit ? " Когда откроют приложение, увидят плашку «Изменения в расписании»." : ""),
+          `<b>Опубликовано: ${U.esc(label)}${m === "urgent" ? " (срочные изменения)" : m === "edit" ? " (изменение)" : ""}.</b> ` +
+          (later ? `Студенты увидят сегодня в ${C.hour}:00.` : "У студентов появится через 1–2 минуты.") +
+          (isChange(m) ? " Подписанным придёт уведомление, а в приложении будет плашка «Изменения в расписании»." : " Подписанным придёт уведомление о новом расписании."),
       });
     } catch (e) {
       if (e.code === 401 || e.code === 403) {
@@ -331,7 +349,7 @@ window.Admin = (() => {
         return login(e.message + ". Расписание не опубликовано.");
       }
       btn.disabled = false;
-      btn.textContent = "Опубликовать";
+      btn.textContent = label0;
       U.toast("Не опубликовано: " + e.message);
       const box = U.$("adm-draft");
       box.insertAdjacentHTML("afterbegin", `<div class="card bad"><p>Не опубликовано: ${U.esc(e.message)}. Проверьте интернет и нажмите «Опубликовать» ещё раз.</p></div>`);

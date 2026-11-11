@@ -1,5 +1,5 @@
 /* Офлайн: оболочка приложения из кэша, расписание — сначала из сети, без сети — последнее сохранённое. */
-const V = "20261111075954";
+const V = "20261111103742";
 const SHELL = "rasp-shell-" + V;
 const CORE = ["./", "index.html", "css/app.css", "js/config.js", "js/pack.js", "js/app.js", "icons/logo.svg", "manifest.webmanifest"];
 self.addEventListener("install", (e) => {
@@ -47,5 +47,39 @@ self.addEventListener("fetch", (e) => {
           return r;
         }),
     ),
+  );
+});
+
+/* уведомления о заменах (присылает сервер push/) */
+self.addEventListener("push", (e) => {
+  let d = {};
+  try {
+    d = e.data ? e.data.json() : {};
+  } catch {
+    d = { body: e.data ? e.data.text() : "" };
+  }
+  e.waitUntil(
+    self.registration.showNotification(d.title || "Расписание КузТАГиС", {
+      body: d.body || "Расписание изменилось.",
+      tag: d.tag || "rasp",
+      renotify: true,
+      icon: "icons/icon-192.png",
+      lang: "ru",
+      data: { url: d.url || "./" },
+    }),
+  );
+});
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const url = new URL((e.notification.data && e.notification.data.url) || "./", self.registration.scope).href;
+  e.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      for (const c of list)
+        if (c.url.startsWith(self.registration.scope) && "focus" in c) {
+          c.postMessage("rasp-reload");
+          return c.focus();
+        }
+      return self.clients.openWindow(url);
+    }),
   );
 });

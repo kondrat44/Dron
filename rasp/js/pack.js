@@ -43,6 +43,7 @@ window.Pack = (() => {
       source: data.source || "",
       publishedAt: opt.publishedAt,
       visibleFrom: opt.visibleFrom,
+      kind: opt.kind || "",
       week: mondayOf(dates[0] || opt.publishedAt.slice(0, 10)),
       dates,
       T,
@@ -101,7 +102,11 @@ window.Pack = (() => {
       const seen = list.filter((e) => e.visibleFrom <= t);
       for (const e of list) if (e.visibleFrom > t && (!nextFlip || e.visibleFrom < nextFlip)) nextFlip = e.visibleFrom;
       if (!seen.length) continue;
-      weeks.push({ week, cur: seen[seen.length - 1], prev: seen[seen.length - 2] || null, dates: seen[seen.length - 1].dates });
+      /* cur — последнее загруженное из видимых; prev — что студенты видели до появления cur
+         (отложенные до вечера правки, которые перекрыло более позднее, в сравнение не попадают) */
+      const cur = seen[seen.length - 1];
+      const before = seen.filter((e) => e !== cur && e.visibleFrom < cur.visibleFrom);
+      weeks.push({ week, cur, prev: before[before.length - 1] || null, dates: cur.dates });
     }
     weeks.sort((a, b) => a.week.localeCompare(b.week));
     return { weeks, nextFlip };
@@ -116,7 +121,7 @@ window.Pack = (() => {
     for (const e of out.editions) (byWeek[e.week] = byWeek[e.week] || []).push(e);
     out.editions = Object.values(byWeek)
       .filter((list) => list.some((e) => (e.dates[e.dates.length - 1] || e.week) >= old))
-      .flatMap((list) => list.sort((a, b) => a.publishedAt.localeCompare(b.publishedAt)).slice(-3))
+      .flatMap((list) => list.sort((a, b) => a.publishedAt.localeCompare(b.publishedAt)).slice(-6))
       .sort((a, b) => a.publishedAt.localeCompare(b.publishedAt));
     return out;
   }

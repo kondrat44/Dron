@@ -5,7 +5,9 @@ window.RASP = {
   branch: "main",
   path: "rasp/data/schedule.json", // путь файла в репозитории
   data: "data/schedule.json", // тот же файл, как его видит сайт
-  hour: 18, // во сколько студенты видят вечерние правки
+  hour: 23, // во сколько студенты видят обычные изменения («Изменить расписание»); новое и срочное — сразу
   title: "КузТАГиС",
-  v: "20261111075954", // версия сборки, ставится автоматически
+  push: "https://rasp-push.hthtt5664.workers.dev", // сервер уведомлений о заменах (Cloudflare, папка push/)
+  pushKey: "BCU7BrMsYnOuwqzLoxvl6O1FKcnxNr85oBaWddPn-VwMbxWqnm6hLKqJcW6j5spfrXVLE4SdDgnSpSboWBQI9UU", // открытый ключ сервера уведомлений
+  v: "20261111103742", // версия сборки, ставится автоматически
 };
