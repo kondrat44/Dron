@@ -28,7 +28,7 @@
   const DAY_S = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
   const MON = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
   const HUE = { 1: 211, 2: 145, 3: 28 };
-  const TYPE = { g: "Группа", t: "Преподаватель", r: "Кабинет" };
+  const TYPE = { g: "Группа", t: "Преподаватель" };
   const iso = (d) => d.toLocaleDateString("sv");
   const at = (s) => new Date(s + "T12:00:00");
   const dm = (s) => s.slice(8, 10) + "." + s.slice(5, 7);
@@ -48,7 +48,7 @@
     wi: 0, // выбранная неделя
     day: "", // выбранный день
     mode: LS.get("rasp-mode") === "week" ? "week" : "day",
-    who: LS.json("rasp-who", null),
+    who: ((w) => (w && TYPE[w.type] ? w : null))(LS.json("rasp-who", null)), // выбор «кабинет» больше не поддерживается
     lessons: new Map(), // id издания -> занятия
     userPicked: false,
   };
@@ -113,9 +113,10 @@
         flipTimer = setTimeout(() => {
           compute();
           render();
-          toast("Расписание обновлено");
         }, ms + 500);
     }
+    /* приложение открыто, а учебная часть опубликовала изменения */
+    if (before && before !== S.weeks.map((w) => w.cur.id).join()) toast("Расписание изменилось");
     if (!S.weeks.length) return;
     const today = iso(now());
     if (!S.userPicked || !S.weeks[S.wi] || before !== S.weeks.map((w) => w.cur.id).join()) {
@@ -260,13 +261,13 @@
     $("who-btn").title = S.who ? TYPE[S.who.type] + ": " + S.who.v + " — нажмите, чтобы сменить" : "Выбрать группу";
     if (!S.file || !S.weeks.length) {
       app.innerHTML = `<div class="empty"><b>Расписание ещё не опубликовано</b>${
-        S.offline ? "Нет интернета. Подключитесь и откройте ещё раз." : S.nextFlip ? "Появится " + esc(whenText(S.nextFlip)) + "." : "Загляните позже."
+        S.offline ? "Нет интернета. Подключитесь и откройте ещё раз." : "Загляните позже."
       }</div>${foot()}`;
       bindFoot();
       return;
     }
     if (!S.who) {
-      app.innerHTML = `<div class="empty"><b>Чьё расписание показать?</b>Выберите группу, преподавателя или кабинет — приложение запомнит выбор.<div class="foot-actions"><button class="btn blue" id="pick-now">Выбрать</button></div></div>${foot()}`;
+      app.innerHTML = `<div class="empty"><b>Чьё расписание показать?</b>Выберите группу или преподавателя — приложение запомнит выбор.<div class="foot-actions"><button class="btn blue" id="pick-now">Выбрать</button></div></div>${foot()}`;
       $("pick-now").onclick = () => picker();
       bindFoot();
       return;
@@ -277,7 +278,9 @@
     const today = iso(now());
     const my = mine(lessonsOf(w.cur));
     const seenKey = "rasp-seen:" + S.who.type + ":" + S.who.v;
-    const showBanner = ch.length && LS.get(seenKey) !== w.cur.id;
+    const fresh = w.prev && LS.get(seenKey) !== w.cur.id; // учебная часть изменила расписание, а этот человек ещё не видел
+    const showBanner = fresh && ch.length;
+    const showQuiet = fresh && !ch.length;
     const line = (x) => {
       const head = `${DAY_S[at(x.l.date).getDay()]} ${dm(x.l.date)}, ${pairName(x.l.period)}${x.l.sub ? ", " + x.l.sub + " подгр." : ""}: `;
       if (x.type === "removed") return `${esc(head)}<b>пара снята</b> — <s>${esc(brief(x.l))}</s>`;
@@ -293,7 +296,11 @@
             .slice(0, 6)
             .map((x) => `<li>${line(x)}</li>`)
             .join("")}</ul>${ch.length > 6 ? `<p class="hint">…и ещё ${ch.length - 6}. Изменённые пары отмечены в расписании.</p>` : ""}<div class="row-actions"><button class="btn" id="seen">Понятно</button></div></section>`
-        : "") +
+        : showQuiet
+          ? `<section class="banner quiet" aria-label="Расписание изменилось"><h2>Расписание изменилось</h2><p>${
+              S.who.type === "g" ? "У группы " + esc(S.who.v) : "У преподавателя " + esc(S.who.v)
+            } на этой неделе ничего не поменялось.</p><div class="row-actions"><button class="btn" id="seen">Понятно</button></div></section>`
+          : "") +
       `<div class="weekbar"><div class="weeknav">${
         S.weeks.length > 1 ? `<button class="nav-btn" id="wk-prev" aria-label="Прошлая неделя" ${S.wi === 0 ? "disabled" : ""}>‹</button>` : ""
       }<b>${esc(weekLabel(w))}</b>${
@@ -364,9 +371,9 @@
     render();
   }
   function foot(w) {
-    return `<footer class="foot">${w ? `<p>Расписание от ${esc(whenText(w.cur.visibleFrom > w.cur.publishedAt ? w.cur.visibleFrom : w.cur.publishedAt))}</p>` : ""}${
-      S.nextFlip && w ? `<p>Следующее обновление — ${esc(whenText(S.nextFlip))}</p>` : ""
-    }<div class="foot-actions"><button class="btn" id="refresh">Обновить</button>${S.who ? '<button class="btn" id="change-who">Сменить группу</button>' : ""}</div><p>Вечерние правки появляются в ${C.hour}:00. Приложение обновляется само.</p><button class="link" id="admin-link">Вход для учебной части</button></footer>`;
+    return `<footer class="foot">${w ? `<p>Расписание от ${esc(whenText(w.cur.publishedAt))}</p>` : ""}<div class="foot-actions"><button class="btn" id="refresh">Обновить</button>${
+      S.who ? '<button class="btn" id="change-who">Сменить группу</button>' : ""
+    }</div><button class="link" id="admin-link">Вход для учебной части</button></footer>`;
   }
   function bindFoot() {
     if ($("refresh"))
@@ -448,17 +455,14 @@
     const lists = {
       g: [...new Set(all.flatMap((l) => l.groups))].sort(sortRu),
       t: [...new Set(all.map((l) => l.teacher).filter(Boolean))].sort(sortRu),
-      r: [...new Set(all.map((l) => l.room).filter(Boolean))].sort(sortRu),
     };
-    const roomName = new Map(all.filter((l) => l.roomName).map((l) => [l.room, l.roomName]));
     const recent = LS.json("rasp-recent", []).filter((x) => lists[x.type] && lists[x.type].includes(x.v));
-    const item = (t, v) =>
-      `<button class="pick${S.who && S.who.type === t && S.who.v === v ? " on" : ""}" data-t="${t}" data-v="${esc(v)}">${esc(v)}${t === "r" && roomName.get(v) ? `<small>${esc(roomName.get(v))}</small>` : ""}</button>`;
+    const item = (t, v) => `<button class="pick${S.who && S.who.type === t && S.who.v === v ? " on" : ""}" data-t="${t}" data-v="${esc(v)}">${esc(v)}</button>`;
     openSheet(
       `<div class="sheet-head"><h2>Чьё расписание?</h2>${S.who ? '<button class="x-btn" id="sheet-x" aria-label="Закрыть">×</button>' : ""}</div><div class="seg" role="group">${Object.entries(TYPE)
         .map(([t, name]) => `<button data-type="${t}" aria-pressed="${t === type}">${name}</button>`)
         .join("")}</div><input class="inp" id="pick-q" type="search" inputmode="search" autocomplete="off" placeholder="${
-        type === "g" ? "Поиск: 23-БС" : type === "t" ? "Поиск по фамилии" : "Поиск: 3108"
+        type === "g" ? "Поиск: 23-БС" : "Поиск по фамилии"
       }" aria-label="Поиск">${
         recent.length ? `<p class="sub-h">Недавние</p><div class="pick-grid" id="pick-recent">${recent.map((x) => item(x.type, x.v)).join("")}</div><p class="sub-h">Все</p>` : ""
       }<div class="${type === "g" ? "pick-grid" : "pick-list"}" id="pick-all">${lists[type].map((v) => item(type, v)).join("")}</div><p class="hint" id="pick-none" hidden>Ничего не найдено.</p>`,

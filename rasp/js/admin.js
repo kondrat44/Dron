@@ -73,7 +73,8 @@ window.Admin = (() => {
   }
 
   /* ---------- проверки файла ---------- */
-  function inspect(data, file) {
+  /* mode: "new" — расписание на неделю, которой ещё нет на сайте; "edit" — исправленный файл уже опубликованной недели */
+  function inspect(data, file, mode) {
     const lessons = data.lessons;
     const groups = [...new Set(lessons.flatMap((l) => l.groups))];
     const dates = [...new Set(lessons.map((l) => l.date))].sort();
@@ -99,7 +100,24 @@ window.Admin = (() => {
       if (gone.length) warn.push((gone.length > 1 ? "В файле нет групп, которые были в прошлый раз: " : "В файле нет группы, которая была в прошлый раз: ") + gone.sort((a, b) => a.localeCompare(b, "ru", { numeric: true })).join(", ") + ".");
       if (lessons.length < last.L.length * 0.6) warn.push(`Пар заметно меньше, чем в прошлый раз: ${lessons.length} вместо ${last.L.length}.`);
     }
-    return { groups, dates, week, stop, warn, same };
+    /* новое или изменение: проверяем, что кнопка нажата та */
+    let switchTo = null,
+      diff = null;
+    const wk = dates.length ? U.dm(dates[0]) + "–" + U.dm(dates[dates.length - 1]) : "";
+    if (!stop.length && mode === "new" && same) {
+      stop.push(`Расписание на неделю ${wk} уже опубликовано. Если это исправленный файл этой недели — опубликуйте его как изменение.`);
+      switchTo = "edit";
+    }
+    if (!stop.length && mode === "edit" && !same) {
+      stop.push(`Неделя ${wk} ещё не опубликована — изменять нечего. Если это расписание на новую неделю — опубликуйте его как новое.`);
+      switchTo = "new";
+    }
+    if (!stop.length && same) {
+      const n = U.now().toISOString();
+      diff = Pack.diff(Pack.unpack(same), Pack.unpack(Pack.edition(data, { id: "draft", publishedAt: n, visibleFrom: n })));
+      if (mode === "edit" && !diff.length) stop.push("Этот файл ничем не отличается от опубликованного расписания недели " + wk + ". Публиковать нечего.");
+    }
+    return { groups, dates, week, stop, warn, same, switchTo, diff };
   }
 
   /* ---------- экран ---------- */
@@ -146,7 +164,11 @@ window.Admin = (() => {
     U.openSheet(
       head("Учебная часть") +
         (note ? `<div class="card ${note.cls}"><p>${note.text}</p></div>` : "") +
-        `<p>Сохраните Excel недели в программе учебной части, как обычно, и загрузите его сюда.</p><input type="file" id="adm-file" accept=".xlsx" hidden><div class="actions"><button class="btn blue" id="adm-pick" ${published ? "" : "disabled"}>Загрузить расписание (Excel)</button></div><div id="adm-draft"></div>` +
+        `<p>Сохраните Excel недели в программе учебной части, как обычно, и выберите, что делаете.</p><input type="file" id="adm-file" accept=".xlsx" hidden><div class="modes"><button class="mode blue" id="adm-new" ${
+          published ? "" : "disabled"
+        }><b>Новое расписание</b><small>Расписание на новую неделю</small></button><button class="mode" id="adm-edit" ${
+          published && eds.length ? "" : "disabled"
+        }><b>Изменить расписание</b><small>Исправленный файл уже опубликованной недели. Студенты увидят «Изменения в расписании»</small></button></div><div id="adm-draft"></div>` +
         `<details class="card" ${eds.length ? "open" : ""}><summary>Опубликовано сейчас: ${eds.length}</summary>${
           eds.length
             ? eds
@@ -167,11 +189,19 @@ window.Admin = (() => {
       U.closeSheet();
       U.toast("Ключ стёрт с этого компьютера");
     };
-    U.$("adm-pick").onclick = () => U.$("adm-file").click();
+    let mode = "new";
+    U.$("adm-new").onclick = () => {
+      mode = "new";
+      U.$("adm-file").click();
+    };
+    U.$("adm-edit").onclick = () => {
+      mode = "edit";
+      U.$("adm-file").click();
+    };
     U.$("adm-file").onchange = (e) => {
       const f = e.target.files[0];
       e.target.value = "";
-      if (f) parse(f);
+      if (f) parse(f, mode);
     };
     U.$("sheet").querySelectorAll("[data-del]").forEach(
       (b) =>
@@ -196,13 +226,13 @@ window.Admin = (() => {
     );
     if (draft) showDraft();
   }
-  async function parse(f) {
+  async function parse(f, mode) {
     const box = U.$("adm-draft");
     box.innerHTML = '<p class="hint">Читаю файл…</p>';
     try {
       if (!/\.xlsx$/i.test(f.name)) throw Error("Нужен файл Excel (.xlsx)");
       const data = await Reader.read(f);
-      draft = { data, name: f.name, info: inspect(data, published && published.file) };
+      draft = { data, name: f.name, mode, info: inspect(data, published && published.file, mode) };
       showDraft();
     } catch (e) {
       draft = null;
@@ -212,14 +242,14 @@ window.Admin = (() => {
   function showDraft() {
     const box = U.$("adm-draft");
     if (!box || !draft) return;
-    const { data, name, info } = draft;
+    const { data, name, info, mode } = draft;
     const n = U.now();
     const canEvening = n.getHours() < C.hour;
+    const evening = canEvening && mode !== "edit"; // изменение по умолчанию показываем сразу
     const teachers = new Set(data.lessons.map((l) => l.teacher).filter(Boolean)).size;
     let diffHtml = "";
-    if (info.same && !info.stop.length) {
-      const ed = Pack.edition(data, { id: "draft", publishedAt: n.toISOString(), visibleFrom: n.toISOString() });
-      const d = Pack.diff(Pack.unpack(info.same), Pack.unpack(ed));
+    if (info.diff && !info.stop.length) {
+      const d = info.diff;
       const line = (x) => {
         const who = x.l.groups.join(", ") + (x.l.sub ? " (" + x.l.sub + " подгр.)" : "");
         const h = `${U.DAY_S[U.at(x.l.date).getDay()]} ${U.dm(x.l.date)}, ${x.l.period ? x.l.period + " пара" : "до первой пары"}, ${who}: `;
@@ -234,18 +264,28 @@ window.Admin = (() => {
         : '<div class="card"><p>Отличий от уже опубликованного расписания этой недели нет.</p></div>';
     } else if (!info.stop.length) diffHtml = '<div class="card"><p>Это новая неделя: раньше её не публиковали.</p></div>';
     box.innerHTML =
-      `<div class="card ${info.stop.length ? "bad" : "ok"}"><h3>${U.esc(name)}</h3>${
+      `<p class="sub-h">${mode === "edit" ? "Изменить расписание" : "Новое расписание"}</p><div class="card ${info.stop.length ? "bad" : "ok"}"><h3>${U.esc(name)}</h3>${
         info.stop.length
-          ? info.stop.map((x) => `<p>${U.esc(x)}</p>`).join("")
+          ? info.stop.map((x) => `<p>${U.esc(x)}</p>`).join("") +
+            (info.switchTo ? `<div class="actions"><button class="btn blue" id="adm-switch">${info.switchTo === "edit" ? "Опубликовать как изменение" : "Опубликовать как новое"}</button></div>` : "")
           : `<p>Неделя ${U.esc(U.dm(info.dates[0]))}–${U.esc(U.dm(info.dates[info.dates.length - 1]))} · групп: ${info.groups.length} · преподавателей: ${teachers} · занятий: ${data.lessons.length}</p>`
       }</div>` +
       (info.warn.length ? `<div class="card warn"><h3>Проверьте</h3><ul>${info.warn.map((x) => `<li>${U.esc(x)}</li>`).join("")}</ul></div>` : "") +
       diffHtml +
       (info.stop.length
         ? ""
-        : `<div class="choice" role="radiogroup" aria-label="Когда показать студентам"><label><input type="radio" name="adm-when" value="evening" ${canEvening ? "checked" : "disabled"}> <span>Показать студентам сегодня в ${C.hour}:00${canEvening ? "" : " (уже позже " + C.hour + ":00)"}</span></label><label><input type="radio" name="adm-when" value="now" ${canEvening ? "" : "checked"}> <span>Показать сразу</span></label></div>${
+        : `<div class="choice" role="radiogroup" aria-label="Когда показать студентам"><label><input type="radio" name="adm-when" value="now" ${evening ? "" : "checked"}> <span>Показать сразу</span></label><label><input type="radio" name="adm-when" value="evening" ${
+            canEvening ? (evening ? "checked" : "") : "disabled"
+          }> <span>Показать студентам сегодня в ${C.hour}:00${canEvening ? "" : " (уже позже " + C.hour + ":00)"}</span></label></div>${
             info.warn.length ? '<div class="choice"><label><input type="checkbox" id="adm-sure"> <span>Я проверил замечания, файл правильный</span></label></div>' : ""
-          }<div class="actions"><button class="btn blue" id="adm-publish" ${info.warn.length ? "disabled" : ""}>Опубликовать</button><button class="btn" id="adm-cancel">Отмена</button></div>`);
+          }<div class="actions"><button class="btn blue" id="adm-publish" ${info.warn.length ? "disabled" : ""}>${mode === "edit" ? "Опубликовать изменения" : "Опубликовать"}</button><button class="btn" id="adm-cancel">Отмена</button></div>`);
+    if (U.$("adm-switch"))
+      U.$("adm-switch").onclick = () => {
+        draft.mode = info.switchTo;
+        draft.info = inspect(data, published && published.file, draft.mode);
+        showDraft();
+      };
+    if (info.stop.length) box.insertAdjacentHTML("beforeend", '<div class="actions"><button class="btn" id="adm-cancel">Отмена</button></div>');
     if (U.$("adm-sure")) U.$("adm-sure").onchange = () => (U.$("adm-publish").disabled = !U.$("adm-sure").checked);
     if (U.$("adm-cancel"))
       U.$("adm-cancel").onclick = () => {
@@ -275,9 +315,16 @@ window.Admin = (() => {
           if (e.code !== 409 || attempt >= 2) throw e;
         }
       }
+      const wasEdit = draft.mode === "edit";
       draft = null;
       await U.reload();
-      main({ cls: "ok", text: `<b>Опубликовано: ${U.esc(label)}.</b> ` + (evening ? `Студенты увидят сегодня в ${C.hour}:00.` : "У студентов появится через 1–2 минуты.") });
+      main({
+        cls: "ok",
+        text:
+          `<b>Опубликовано: ${U.esc(label)}${wasEdit ? " (изменение)" : ""}.</b> ` +
+          (evening ? `Студенты увидят сегодня в ${C.hour}:00.` : "У студентов появится через 1–2 минуты.") +
+          (wasEdit ? " Когда откроют приложение, увидят плашку «Изменения в расписании»." : ""),
+      });
     } catch (e) {
       if (e.code === 401 || e.code === 403) {
         U.LS.set("rasp-key", null);
