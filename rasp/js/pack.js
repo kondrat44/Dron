@@ -121,7 +121,7 @@ window.Pack = (() => {
     for (const e of out.editions) (byWeek[e.week] = byWeek[e.week] || []).push(e);
     out.editions = Object.values(byWeek)
       .filter((list) => list.some((e) => (e.dates[e.dates.length - 1] || e.week) >= old))
-      .flatMap((list) => list.sort((a, b) => a.publishedAt.localeCompare(b.publishedAt)).slice(-6))
+      .flatMap((list) => list.sort((a, b) => a.publishedAt.localeCompare(b.publishedAt)).slice(-4))
       .sort((a, b) => a.publishedAt.localeCompare(b.publishedAt));
     return out;
   }

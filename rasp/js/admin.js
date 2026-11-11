@@ -78,6 +78,8 @@ window.Admin = (() => {
      "urgent" — срочные изменения уже опубликованной недели (видно сразу) */
   const MODE = { new: "Новое расписание", edit: "Изменить расписание", urgent: "Срочные изменения расписания" };
   const isChange = (m) => m === "edit" || m === "urgent";
+  /* когда обычные изменения видны студентам: C.hour = 24 — в полночь (00:00 следующих суток) */
+  const AT = C.hour >= 24 ? "в 00:00" : "сегодня в " + C.hour + ":00";
   /* когда студенты увидят публикацию */
   function visibleFrom(mode, n) {
     if (mode !== "edit") return new Date(n);
@@ -177,7 +179,7 @@ window.Admin = (() => {
         (note ? `<div class="card ${note.cls}"><p>${note.text}</p></div>` : "") +
         `<p>Сохраните Excel недели в программе учебной части, как обычно, и выберите, что делаете.</p><input type="file" id="adm-file" accept=".xlsx" hidden><div class="modes"><button class="mode blue" id="adm-new" ${published ? "" : "disabled"}><b>Новое расписание</b><small>На новую неделю. Студенты увидят сразу</small></button><button class="mode" id="adm-edit" ${
           published && eds.length ? "" : "disabled"
-        }><b>Изменить расписание</b><small>Исправленный файл этой недели. Студенты увидят сегодня в ${C.hour}:00</small></button><button class="mode urgent" id="adm-urgent" ${
+        }><b>Изменить расписание</b><small>Исправленный файл этой недели. Студенты увидят ночью ${AT}</small></button><button class="mode urgent" id="adm-urgent" ${
           published && eds.length ? "" : "disabled"
         }><b>Срочные изменения расписания</b><small>Исправленный файл этой недели. Студенты увидят сразу</small></button></div><div id="adm-draft"></div>` +
         `<details class="card" ${eds.length ? "open" : ""}><summary>Опубликовано сейчас: ${eds.length}</summary>${
@@ -277,7 +279,7 @@ window.Admin = (() => {
           ? info.stop.map((x) => `<p>${U.esc(x)}</p>`).join("") +
             (info.switchTo
               ? `<div class="actions">${info.switchTo
-                  .map((m) => `<button class="btn${m === "urgent" ? " red" : " blue"}" data-switch="${m}">${m === "edit" ? `Изменить (студенты увидят в ${C.hour}:00)` : m === "urgent" ? "Срочные изменения (сразу)" : "Опубликовать как новое"}</button>`)
+                  .map((m) => `<button class="btn${m === "urgent" ? " red" : " blue"}" data-switch="${m}">${m === "edit" ? `Изменить (студенты увидят ${AT})` : m === "urgent" ? "Срочные изменения (сразу)" : "Опубликовать как новое"}</button>`)
                   .join("")}</div>`
               : "")
           : `<p>Неделя ${U.esc(U.dm(info.dates[0]))}–${U.esc(U.dm(info.dates[info.dates.length - 1]))} · групп: ${info.groups.length} · преподавателей: ${teachers} · занятий: ${data.lessons.length}</p>`
@@ -288,7 +290,7 @@ window.Admin = (() => {
         ? ""
         : `<div class="card when"><p id="adm-when">${
             later
-              ? `Студенты увидят сегодня в <b>${C.hour}:00</b>. Если нужно раньше — нажмите «Срочные изменения расписания».`
+              ? `Студенты увидят <b>${AT}</b>${C.hour >= 24 ? " (в полночь)" : ""}. Если нужно раньше — нажмите «Срочные изменения расписания».`
               : mode === "edit"
                 ? `Уже позже ${C.hour}:00 — студенты увидят сразу.`
                 : "Студенты увидят <b>сразу</b>, через 1–2 минуты."
@@ -340,7 +342,7 @@ window.Admin = (() => {
         cls: "ok",
         text:
           `<b>Опубликовано: ${U.esc(label)}${m === "urgent" ? " (срочные изменения)" : m === "edit" ? " (изменение)" : ""}.</b> ` +
-          (later ? `Студенты увидят сегодня в ${C.hour}:00.` : "У студентов появится через 1–2 минуты.") +
+          (later ? `Студенты увидят ${AT}.` : "У студентов появится через 1–2 минуты.") +
           (isChange(m) ? " Подписанным придёт уведомление, а в приложении будет плашка «Изменения в расписании»." : " Подписанным придёт уведомление о новом расписании."),
       });
     } catch (e) {
