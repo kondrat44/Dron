@@ -374,7 +374,7 @@
   function foot(w) {
     return `<footer class="foot">${w ? `<p>Расписание от ${esc(whenText(w.cur.publishedAt))}</p>` : ""}<div class="foot-actions"><button class="btn" id="refresh">Обновить</button>${
       S.who ? '<button class="btn" id="change-who">Сменить группу</button>' : ""
-    }</div>${pushFoot()}<button class="link" id="admin-link">Вход для учебной части</button></footer>`;
+    }</div>${pushFoot()}<button class="link" id="help-link">Инструкция для iPhone и Android</button><br><button class="link" id="admin-link">Вход для учебной части</button></footer>`;
   }
   function bindFoot() {
     if ($("refresh"))
@@ -385,6 +385,7 @@
       };
     if ($("change-who")) $("change-who").onclick = () => picker();
     if ($("admin-link")) $("admin-link").onclick = () => admin();
+    if ($("help-link")) $("help-link").onclick = () => help();
     bindPush();
   }
 
@@ -496,6 +497,76 @@
           window.scrollTo(0, 0);
         }),
     );
+  }
+
+  /* ---------- инструкция: при первом заходе и по кнопке «?» ---------- */
+  const ICON = {
+    share: '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7.5 7.5 12 3l4.5 4.5M6 11H5v10h14V11h-1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    plus: '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 8v8M8 12h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+    dots: '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2" fill="currentColor"/><circle cx="12" cy="12" r="2" fill="currentColor"/><circle cx="12" cy="19" r="2" fill="currentColor"/></svg>',
+  };
+  const HELP = {
+    ios: {
+      name: "iPhone",
+      steps: [
+        ["Откройте сайт в Safari", "Лучше именно в Safari — из него проще всего добавить расписание на экран «Домой»."],
+        [`Нажмите «Поделиться» ${ICON.share}`, "Кнопка внизу экрана. Если её не видно, сначала нажмите «•••» справа от адресной строки."],
+        [`Выберите «На экран „Домой“» ${ICON.plus}`, "Пункт может быть ниже — пролистайте список. Затем нажмите «Добавить» вверху справа."],
+        ["Откройте «Расписание» со значка", "Значок появится на экране телефона. Дальше открывайте расписание только с него — так работают уведомления."],
+        ["Выберите группу", "Или преподавателя. Приложение запомнит выбор, сменить можно кнопкой вверху."],
+        ["Включите уведомления", "Нажмите «🔔 Уведомления о заменах» и затем «Разрешить»."],
+        ["Проверьте", "Внизу нажмите «Проверить» и сверните приложение — через 15 секунд придёт пробное уведомление."],
+      ],
+      fix: "Настройки → Уведомления → «Расписание»: включите «Допуск уведомлений», «Заблокированный экран», «Центр уведомлений» и «Баннеры». Выключите «Не беспокоить» (Фокусирование). Нужна iOS 16.4 или новее.",
+    },
+    android: {
+      name: "Android",
+      steps: [
+        ["Откройте сайт в Chrome", "В других браузерах уведомления тоже могут работать, но проверено в Chrome."],
+        ["Установите приложение", `Нажмите «Установить» в синей плашке. Если её нет — меню ${ICON.dots} вверху справа → «Добавить на гл. экран» или «Установить приложение».`],
+        ["Откройте «Расписание» со значка", "Значок появится на экране телефона, приложение откроется без адресной строки."],
+        ["Выберите группу", "Или преподавателя. Приложение запомнит выбор, сменить можно кнопкой вверху."],
+        ["Включите уведомления", "Нажмите «🔔 Уведомления о заменах» и затем «Разрешить»."],
+        ["Проверьте", "Внизу нажмите «Проверить» и сверните приложение — через 15 секунд придёт пробное уведомление."],
+      ],
+      fix: "Настройки → Приложения → Chrome → Уведомления — включить. Там же «Батарея» → «Без ограничений» (на Xiaomi ещё «Автозапуск»), иначе телефон усыпляет Chrome и уведомления приходят только при открытии.",
+    },
+    use: {
+      name: "Просмотр",
+      steps: [
+        ["День или неделя", "Переключатель над днями. Дни листаются пальцем влево-вправо."],
+        ["Изменения видно сразу", "Если учебная часть поменяла пары, сверху появится жёлтая плашка, а изменённые пары отмечены «изменено», «новая» или «снята»."],
+        ["Когда меняется расписание", "Новое расписание и срочные изменения — сразу. Обычные правки — ночью, в 00:00."],
+        ["Без интернета", "Показывается последнее сохранённое расписание. Обновится само, когда появится интернет."],
+      ],
+      fix: "",
+    },
+  };
+  function help(tab) {
+    tab = tab || (isIos() ? "ios" : "android");
+    const h = HELP[tab],
+      inst = standalone();
+    const first = !LS.get("rasp-help");
+    openSheet(
+      `<div class="sheet-head"><h2>Как пользоваться</h2>${S.who ? '<button class="x-btn" id="sheet-x" aria-label="Закрыть">×</button>' : ""}</div><div class="seg" role="group" aria-label="Телефон">${Object.entries(HELP)
+        .map(([k, x]) => `<button data-help="${k}" aria-pressed="${k === tab}">${x.name}</button>`)
+        .join("")}</div>${
+        inst && tab !== "use" ? '<div class="card ok"><p>✓ Приложение уже на экране телефона — осталось выбрать группу и включить уведомления.</p></div>' : ""
+      }<ol class="steps">${h.steps
+        .map(([t, d], i) => `<li class="${inst && tab !== "use" && i < (tab === "ios" ? 4 : 3) ? "done" : ""}"><span class="step-n">${i + 1}</span><div><b>${t}</b><p>${d}</p></div></li>`)
+        .join("")}</ol>${
+        h.fix ? `<details class="card"><summary>Уведомления не приходят?</summary><p>${h.fix}</p></details>` : ""
+      }<div class="actions"><button class="btn blue" id="help-ok">${S.who ? "Понятно" : "Понятно — выбрать группу"}</button><a class="btn" href="instrukciya.docx" download="Инструкция - Расписание КузТАГиС.docx">📄 Инструкция в Word</a></div>`,
+    );
+    $("sheet").querySelectorAll("[data-help]").forEach((b) => (b.onclick = () => help(b.dataset.help)));
+    const done = () => {
+      LS.set("rasp-help", "seen");
+      closeSheet();
+      if (!S.who && S.weeks.length) setTimeout(() => picker(), 340);
+    };
+    $("help-ok").onclick = done;
+    if ($("sheet-x")) $("sheet-x").onclick = done;
+    if (first) LS.set("rasp-help", "seen");
   }
 
   /* ---------- уведомления о заменах (Web Push, сервер — папка push/) ---------- */
@@ -643,6 +714,7 @@
     toastTimer = setTimeout(() => (t.hidden = true), 3800);
   }
   $("who-btn").onclick = () => (S.weeks.length ? picker() : toast("Расписание ещё не опубликовано"));
+  $("help-btn").onclick = () => help();
   $("theme-btn").onclick = () => {
     const dark = document.documentElement.dataset.theme !== "dark";
     document.documentElement.dataset.theme = dark ? "dark" : "light";
@@ -681,11 +753,12 @@
   setInterval(() => document.visibilityState === "visible" && load(true), 5 * 60 * 1000);
   setInterval(() => document.visibilityState === "visible" && $("scrim").hidden && S.who && S.weeks.length && render(), 60 * 1000);
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(() => {});
-  window.Rasp = { load, render, picker, admin, toast };
+  window.Rasp = { load, render, picker, admin, toast, help };
   load(true).then(() => {
     const ps = Push.state();
     if (Push.on() && S.who && (Date.now() - ps.at > 3 * 86400e3 || JSON.stringify(ps.who) !== JSON.stringify(S.who))) Push.sync();
-    if (S.weeks.length && !S.who) picker();
     if (location.hash === "#admin") admin();
+    else if (location.hash === "#help" || !LS.get("rasp-help")) help();
+    else if (S.weeks.length && !S.who) picker();
   });
 })();
