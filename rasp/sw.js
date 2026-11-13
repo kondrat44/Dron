@@ -1,5 +1,5 @@
 /* Офлайн: оболочка приложения из кэша, расписание — сначала из сети, без сети — последнее сохранённое. */
-const V = "20261111112034";
+const V = "20261113094617";
 const SHELL = "rasp-shell-" + V;
 const CORE = ["./", "index.html", "css/app.css", "js/config.js", "js/pack.js", "js/app.js", "icons/logo.svg", "manifest.webmanifest"];
 self.addEventListener("install", (e) => {
