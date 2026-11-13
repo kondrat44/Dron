@@ -714,7 +714,6 @@
     toastTimer = setTimeout(() => (t.hidden = true), 3800);
   }
   $("who-btn").onclick = () => (S.weeks.length ? picker() : toast("Расписание ещё не опубликовано"));
-  $("help-btn").onclick = () => help();
   $("theme-btn").onclick = () => {
     const dark = document.documentElement.dataset.theme !== "dark";
     document.documentElement.dataset.theme = dark ? "dark" : "light";

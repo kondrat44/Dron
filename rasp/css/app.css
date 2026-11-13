@@ -62,8 +62,6 @@ button { cursor: pointer; }
 html[data-theme="dark"] .i-moon { opacity: 0; transform: rotate(60deg) scale(0.6); }
 html[data-theme="dark"] .i-sun { opacity: 1; transform: none; }
 
-.help-btn { font-family: var(--fd); font-weight: 700; font-size: 1.1rem; color: var(--ink2); }
-
 /* основная часть */
 .app {
   max-width: 760px; margin: 0 auto;
