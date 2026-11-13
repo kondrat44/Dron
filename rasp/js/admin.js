@@ -138,7 +138,7 @@ window.Admin = (() => {
   function login(msg) {
     U.openSheet(
       head("Учебная часть") +
-        `<p>Здесь публикуется расписание для студентов. Введите ключ учебной части — он нужен один раз на этом компьютере.</p>${msg ? `<div class="card bad"><p>${U.esc(msg)}</p></div>` : ""}<input class="inp" id="adm-key" type="password" autocomplete="off" placeholder="Ключ учебной части" aria-label="Ключ учебной части"><div class="actions"><button class="btn blue" id="adm-login">Войти</button></div><p class="hint">Ключ хранится только в этом браузере и никуда, кроме GitHub, не отправляется. Не вводите его на чужих компьютерах.</p>`,
+        `<p>Здесь публикуется расписание для студентов. Введите ключ учебной части — он нужен один раз на этом компьютере.</p>${msg ? `<div class="card bad"><p>${U.esc(msg)}</p></div>` : ""}<input class="inp" id="adm-key" type="password" autocomplete="off" placeholder="Ключ учебной части" aria-label="Ключ учебной части"><div class="actions"><button class="btn blue" id="adm-login">Войти</button><a class="btn" href="instrukciya-uchebnaya.docx" download="Инструкция для учебной части - Расписание КузТАГиС.docx">📄 Инструкция (Word)</a></div><p class="hint">Ключ хранится только в этом браузере и никуда, кроме GitHub, не отправляется. Не вводите его на чужих компьютерах.</p>`,
     );
     U.$("sheet-x").onclick = U.closeSheet;
     const go = async () => {
@@ -193,7 +193,7 @@ window.Admin = (() => {
                 )
                 .join("")
             : "<p>Пока ничего не опубликовано.</p>"
-        }</details><div class="actions"><button class="btn" id="adm-out">Выйти (стереть ключ с этого компьютера)</button></div>`,
+        }</details><div class="actions"><a class="btn" id="adm-doc" href="instrukciya-uchebnaya.docx" download="Инструкция для учебной части - Расписание КузТАГиС.docx">📄 Инструкция для учебной части (Word)</a><button class="btn" id="adm-out">Выйти (стереть ключ с этого компьютера)</button></div>`,
     );
     U.$("sheet-x").onclick = U.closeSheet;
     U.$("adm-out").onclick = () => {

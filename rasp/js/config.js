@@ -9,5 +9,5 @@ window.RASP = {
   title: "КузТАГиС",
   push: "https://rasp-push.hthtt5664.workers.dev", // сервер уведомлений о заменах (Cloudflare, папка push/)
   pushKey: "BCU7BrMsYnOuwqzLoxvl6O1FKcnxNr85oBaWddPn-VwMbxWqnm6hLKqJcW6j5spfrXVLE4SdDgnSpSboWBQI9UU", // открытый ключ сервера уведомлений
-  v: "20261113101523", // версия сборки, ставится автоматически
+  v: "20261113104549", // версия сборки, ставится автоматически
 };

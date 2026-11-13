@@ -556,7 +556,7 @@
         .map(([t, d], i) => `<li class="${inst && tab !== "use" && i < (tab === "ios" ? 4 : 3) ? "done" : ""}"><span class="step-n">${i + 1}</span><div><b>${t}</b><p>${d}</p></div></li>`)
         .join("")}</ol>${
         h.fix ? `<details class="card"><summary>Уведомления не приходят?</summary><p>${h.fix}</p></details>` : ""
-      }<div class="actions"><button class="btn blue" id="help-ok">${S.who ? "Понятно" : "Понятно — выбрать группу"}</button><a class="btn" href="instrukciya.docx" download="Инструкция - Расписание КузТАГиС.docx">📄 Инструкция в Word</a></div>`,
+      }<div class="actions"><button class="btn blue" id="help-ok">${S.who ? "Понятно" : "Понятно — выбрать группу"}</button><a class="btn" href="instrukciya.docx" download="Инструкция для студентов - Расписание КузТАГиС.docx">📄 Инструкция в Word</a></div>`,
     );
     $("sheet").querySelectorAll("[data-help]").forEach((b) => (b.onclick = () => help(b.dataset.help)));
     const done = () => {
