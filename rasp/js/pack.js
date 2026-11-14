@@ -20,10 +20,11 @@ window.Pack = (() => {
       return ix[k].get(v);
     };
     const dates = [...new Set(data.lessons.map((l) => l.date))].sort();
+    const short = [...new Set(opt.short || [])].filter((d) => dates.includes(d)).sort(); // сокращённые дни: пары по 1 часу
     const L = data.lessons
       .filter((l) => !l.cancelled && l.subject)
       .map((l) => {
-        const tm = Model.times(l, set) || ["", ""];
+        const tm = (short.includes(l.date) && l.period && set.bells.short[l.period - 1]) || Model.times(l, set) || ["", ""];
         return [
           dates.indexOf(l.date),
           l.period === null || l.period === undefined ? 0 : l.period,
@@ -46,12 +47,16 @@ window.Pack = (() => {
       kind: opt.kind || "",
       week: mondayOf(dates[0] || opt.publishedAt.slice(0, 10)),
       dates,
+      ...(short.length ? { short } : {}),
       T,
       B,
       N,
       L,
     };
   }
+  /* сокращённые дни, которых не было в прошлом издании */
+  const shortAdded = (prev, cur) => ((cur && cur.short) || []).filter((d) => !((prev && prev.short) || []).includes(d));
+  const shortSame = (a, b) => JSON.stringify((a && a.short) || []) === JSON.stringify((b && b.short) || []);
   function unpack(ed) {
     return ed.L.map((x, i) => ({
       i,
@@ -125,5 +130,5 @@ window.Pack = (() => {
       .sort((a, b) => a.publishedAt.localeCompare(b.publishedAt));
     return out;
   }
-  return { edition, unpack, diff, view, merge, mondayOf, keyOf };
+  return { edition, unpack, diff, view, merge, mondayOf, keyOf, shortAdded, shortSame };
 })();

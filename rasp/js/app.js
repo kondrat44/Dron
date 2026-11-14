@@ -221,7 +221,8 @@
     const t = hm(now());
     let soonUsed = false;
     const keys = [...slots.keys()].sort((a, b) => a - b);
-    return keys
+    const shortNote = (w.cur.short || []).includes(date) ? '<div class="note short-day">⏱ <b>Сокращённый день</b> — пары по 1 часу.</div>' : "";
+    return shortNote + keys
       .map((k) => {
         const list = slots.get(k);
         const tm = (list && list.find((l) => l.start) && [list.find((l) => l.start).start, list.find((l) => l.start).end]) || times.get(k) || ["", ""];
@@ -279,8 +280,9 @@
     const my = mine(lessonsOf(w.cur));
     const seenKey = "rasp-seen:" + S.who.type + ":" + S.who.v;
     const fresh = w.prev && LS.get(seenKey) !== w.cur.id; // учебная часть изменила расписание, а этот человек ещё не видел
-    const showBanner = fresh && ch.length;
-    const showQuiet = fresh && !ch.length;
+    const shortNew = w.prev ? Pack.shortAdded(w.prev, w.cur) : []; // учебная часть отметила сокращённые дни
+    const showBanner = fresh && (ch.length || shortNew.length);
+    const showQuiet = fresh && !ch.length && !shortNew.length;
     const line = (x) => {
       const head = `${DAY_S[at(x.l.date).getDay()]} ${dm(x.l.date)}, ${pairName(x.l.period)}${x.l.sub ? ", " + x.l.sub + " подгр." : ""}: `;
       if (x.type === "removed") return `${esc(head)}<b>пара снята</b> — <s>${esc(brief(x.l))}</s>`;
@@ -293,7 +295,9 @@
       installNote() +
       pushNote() +
       (showBanner
-        ? `<section class="banner" aria-label="Изменения в расписании"><h2>Изменения в расписании</h2><ul>${ch
+        ? `<section class="banner" aria-label="Изменения в расписании"><h2>Изменения в расписании</h2><ul>${shortNew
+            .map((d) => `<li><b>${DAY_S[at(d).getDay()]} ${dm(d)} — сокращённый день</b>: пары по 1 часу</li>`)
+            .join("")}${ch
             .slice(0, 6)
             .map((x) => `<li>${line(x)}</li>`)
             .join("")}</ul>${ch.length > 6 ? `<p class="hint">…и ещё ${ch.length - 6}. Изменённые пары отмечены в расписании.</p>` : ""}<div class="row-actions"><button class="btn" id="seen">Понятно</button></div></section>`
@@ -315,7 +319,7 @@
       `<nav class="days" aria-label="Дни недели">${days
         .map((d) => {
           const n = my.some((l) => l.date === d);
-          const c = ch.some((x) => x.l.date === d);
+          const c = ch.some((x) => x.l.date === d) || shortNew.includes(d);
           return `<button class="day-btn${d === S.day && S.mode === "day" ? " on" : ""}${n ? "" : " none"}${d === today ? " today" : ""}${c ? " chg" : ""}" data-day="${d}" aria-pressed="${d === S.day && S.mode === "day"}" aria-label="${DAY[at(d).getDay()]}, ${dm(d)}${d === today ? ", сегодня" : ""}${c ? ", есть изменения" : ""}"><b>${DAY_S[at(d).getDay()]}</b><small>${dm(d)}</small></button>`;
         })
         .join("")}</nav>` +
@@ -537,6 +541,7 @@
         ["День или неделя", "Переключатель над днями. Дни листаются пальцем влево-вправо."],
         ["Изменения видно сразу", "Если учебная часть поменяла пары, сверху появится жёлтая плашка, а изменённые пары отмечены «изменено», «новая» или «снята»."],
         ["Когда меняется расписание", "Новое расписание и срочные изменения — сразу. Обычные правки — ночью, в 00:00."],
+        ["Сокращённый день", "Перед праздником учебная часть может отметить сокращённый день: над парами будет «⏱ Сокращённый день», пары по 1 часу, как в субботу."],
         ["Без интернета", "Показывается последнее сохранённое расписание. Обновится само, когда появится интернет."],
       ],
       fix: "",

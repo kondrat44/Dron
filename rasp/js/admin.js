@@ -87,7 +87,7 @@ window.Admin = (() => {
     t.setHours(C.hour, 0, 0, 0);
     return t > n ? t : new Date(n); // уже позже C.hour:00 — показываем сразу
   }
-  function inspect(data, file, mode) {
+  function inspect(data, file, mode, short) {
     const lessons = data.lessons;
     const groups = [...new Set(lessons.flatMap((l) => l.groups))];
     const dates = [...new Set(lessons.map((l) => l.date))].sort();
@@ -125,12 +125,17 @@ window.Admin = (() => {
       stop.push(`Неделя ${wk} ещё не опубликована — изменять нечего. Если это расписание на новую неделю — опубликуйте его как новое.`);
       switchTo = ["new"];
     }
+    /* сокращённые дни: по умолчанию — как в уже опубликованном расписании этой недели */
+    if (!short) short = ((same && same.short) || []).filter((d) => dates.includes(d));
+    const sh = { short: short.filter((d) => dates.includes(d)).sort() };
+    const shortAdded = same ? Pack.shortAdded(same, sh) : sh.short;
+    const shortRemoved = same ? Pack.shortAdded(sh, same) : [];
     if (!stop.length && same) {
       const n = U.now().toISOString();
-      diff = Pack.diff(Pack.unpack(same), Pack.unpack(Pack.edition(data, { id: "draft", publishedAt: n, visibleFrom: n })));
-      if (isChange(mode) && !diff.length) stop.push("Этот файл ничем не отличается от последнего загруженного расписания недели " + wk + ". Публиковать нечего.");
+      diff = Pack.diff(Pack.unpack(same), Pack.unpack(Pack.edition(data, { id: "draft", publishedAt: n, visibleFrom: n, short: sh.short })));
+      if (isChange(mode) && !diff.length && Pack.shortSame(same, sh)) stop.push("Этот файл ничем не отличается от последнего загруженного расписания недели " + wk + ". Публиковать нечего. Если нужно только отметить сокращённый день — поставьте галочку ниже.");
     }
-    return { groups, dates, week, stop, warn, same, switchTo, diff };
+    return { groups, dates, week, stop, warn, same, switchTo, diff, short: sh.short, shortAdded, shortRemoved };
   }
 
   /* ---------- экран ---------- */
@@ -243,11 +248,25 @@ window.Admin = (() => {
       if (!/\.xlsx$/i.test(f.name)) throw Error("Нужен файл Excel (.xlsx)");
       const data = await Reader.read(f);
       draft = { data, name: f.name, mode, info: inspect(data, published && published.file, mode) };
+      draft.short = draft.info.short;
       showDraft();
     } catch (e) {
       draft = null;
       box.innerHTML = `<div class="card bad"><h3>Файл не прочитан</h3><p>${U.esc(e.message || String(e))}</p><p>Нужен Excel недели в том же виде, в каком его выдаёт программа учебной части.</p></div>`;
     }
+  }
+  /* галочки «Сокращённый день»: перед праздником пары по 1 часу */
+  function shortBlock(info) {
+    if (!info.dates.length || info.switchTo) return "";
+    const days = info.dates.filter((d) => ![0, 6].includes(U.at(d).getDay()));
+    if (!days.length) return "";
+    const bells = Model.withDefaults({}).bells.short;
+    return `<div class="card short-days"><h3>Сокращённые дни</h3><p>Перед праздником пары идут по 1 часу. Отметьте такой день — студенты увидят время пар как в субботу.</p><div class="chips">${days
+      .map((d) => `<label class="chip"><input type="checkbox" data-short="${d}" ${info.short.includes(d) ? "checked" : ""}><span>${U.DAY_S[U.at(d).getDay()]} ${U.dm(d)}</span></label>`)
+      .join("")}</div><p class="hint">Время в сокращённый день: ${bells
+      .slice(0, 6)
+      .map((b, i) => `${i + 1} пара ${b[0]}–${b[1]}`)
+      .join(" · ")}</p></div>`;
   }
   function showDraft() {
     const box = U.$("adm-draft");
@@ -258,7 +277,10 @@ window.Admin = (() => {
     const later = from > n;
     const teachers = new Set(data.lessons.map((l) => l.teacher).filter(Boolean)).size;
     let diffHtml = "";
-    if (info.diff && !info.stop.length) {
+    const dd = (d) => `${U.DAY_S[U.at(d).getDay()]} ${U.dm(d)}`;
+    const shortLines = info.shortAdded.map((d) => `<li><b>${dd(d)} — сокращённый день</b>, пары по 1 часу</li>`).concat(info.shortRemoved.map((d) => `<li><b>${dd(d)} — обычный день</b> (сокращённый отменён)</li>`));
+    if (info.diff && !info.stop.length && !info.diff.length && shortLines.length) diffHtml = `<details class="card" open><summary>Что изменилось по сравнению с опубликованным</summary><ul>${shortLines.join("")}</ul></details>`;
+    else if (info.diff && !info.stop.length) {
       const d = info.diff;
       const line = (x) => {
         const who = x.l.groups.join(", ") + (x.l.sub ? " (" + x.l.sub + " подгр.)" : "");
@@ -267,7 +289,7 @@ window.Admin = (() => {
         return U.esc(h) + (x.type === "removed" ? `<b>снята</b> — <s>${U.esc(v(x.l))}</s>` : x.type === "new" ? `<b>новая</b> — ${U.esc(v(x.l))}` : `${U.esc(v(x.l))} <s>было: ${U.esc(v(x.old))}</s>`);
       };
       diffHtml = d.length
-        ? `<details class="card" open><summary>Что изменилось по сравнению с опубликованным: ${d.length}</summary><ul>${d
+        ? `<details class="card" open><summary>Что изменилось по сравнению с опубликованным: ${d.length}</summary><ul>${shortLines.join("")}${d
             .slice(0, 60)
             .map((x) => `<li>${line(x)}</li>`)
             .join("")}</ul>${d.length > 60 ? `<p class="hint">…и ещё ${d.length - 60}.</p>` : ""}</details>`
@@ -284,6 +306,7 @@ window.Admin = (() => {
               : "")
           : `<p>Неделя ${U.esc(U.dm(info.dates[0]))}–${U.esc(U.dm(info.dates[info.dates.length - 1]))} · групп: ${info.groups.length} · преподавателей: ${teachers} · занятий: ${data.lessons.length}</p>`
       }</div>` +
+      shortBlock(info) +
       (info.warn.length ? `<div class="card warn"><h3>Проверьте</h3><ul>${info.warn.map((x) => `<li>${U.esc(x)}</li>`).join("")}</ul></div>` : "") +
       diffHtml +
       (info.stop.length
@@ -301,11 +324,20 @@ window.Admin = (() => {
       (b) =>
         (b.onclick = () => {
           draft.mode = b.dataset.switch;
-          draft.info = inspect(data, published && published.file, draft.mode);
+          draft.info = inspect(data, published && published.file, draft.mode, draft.short);
           showDraft();
         }),
     );
     if (info.stop.length) box.insertAdjacentHTML("beforeend", '<div class="actions"><button class="btn" id="adm-cancel">Отмена</button></div>');
+    box.querySelectorAll("[data-short]").forEach(
+      (c) =>
+        (c.onchange = () => {
+          const d = c.dataset.short;
+          draft.short = c.checked ? [...draft.short, d].sort() : draft.short.filter((x) => x !== d);
+          draft.info = inspect(data, published && published.file, draft.mode, draft.short);
+          showDraft();
+        }),
+    );
     if (U.$("adm-sure")) U.$("adm-sure").onchange = () => (U.$("adm-publish").disabled = !U.$("adm-sure").checked);
     if (U.$("adm-cancel"))
       U.$("adm-cancel").onclick = () => {
@@ -323,7 +355,7 @@ window.Admin = (() => {
     const n = U.now();
     const from = visibleFrom(draft.mode, n);
     const later = from > n;
-    const ed = Pack.edition(draft.data, { id: n.getTime().toString(36), publishedAt: n.toISOString(), visibleFrom: from.toISOString(), kind: draft.mode });
+    const ed = Pack.edition(draft.data, { id: n.getTime().toString(36), publishedAt: n.toISOString(), visibleFrom: from.toISOString(), kind: draft.mode, short: draft.short });
     const label = edLabel(ed);
     try {
       for (let attempt = 0; ; attempt++) {
@@ -336,6 +368,7 @@ window.Admin = (() => {
         }
       }
       const m = draft.mode;
+      const sd = (ed.short || []).map((d) => `${U.DAY_S[U.at(d).getDay()]} ${U.dm(d)}`);
       draft = null;
       await U.reload();
       main({
@@ -343,6 +376,7 @@ window.Admin = (() => {
         text:
           `<b>Опубликовано: ${U.esc(label)}${m === "urgent" ? " (срочные изменения)" : m === "edit" ? " (изменение)" : ""}.</b> ` +
           (later ? `Студенты увидят ${AT}.` : "У студентов появится через 1–2 минуты.") +
+          (sd.length ? ` Сокращённые дни (пары по 1 часу): ${U.esc(sd.join(", "))}.` : "") +
           (isChange(m) ? " Подписанным придёт уведомление, а в приложении будет плашка «Изменения в расписании»." : " Подписанным придёт уведомление о новом расписании."),
       });
     } catch (e) {
