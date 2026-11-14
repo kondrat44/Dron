@@ -74,18 +74,16 @@ window.Admin = (() => {
 
   /* ---------- проверки файла ---------- */
   /* mode: "new" — расписание на неделю, которой ещё нет на сайте (видно сразу);
-     "edit" — исправленный файл уже опубликованной недели (студенты увидят в C.hour:00);
+     "edit" — исправленный файл уже опубликованной недели (видно сразу, уведомление вечером в C.notifyHour:00);
      "urgent" — срочные изменения уже опубликованной недели (видно сразу) */
   const MODE = { new: "Новое расписание", edit: "Изменить расписание", urgent: "Срочные изменения расписания" };
   const isChange = (m) => m === "edit" || m === "urgent";
-  /* когда обычные изменения видны студентам: C.hour = 24 — в полночь (00:00 следующих суток) */
-  const AT = C.hour >= 24 ? "в 00:00" : "сегодня в " + C.hour + ":00";
+  /* плановые изменения видны сразу, уведомление — вечером в C.notifyHour:00 (если позже — сразу) */
+  const NH = C.notifyHour || 18;
+  const AT = "в " + NH + ":00";
   /* когда студенты увидят публикацию */
   function visibleFrom(mode, n) {
-    if (mode !== "edit") return new Date(n);
-    const t = new Date(n);
-    t.setHours(C.hour, 0, 0, 0);
-    return t > n ? t : new Date(n); // уже позже C.hour:00 — показываем сразу
+    return new Date(n); // все публикации студенты видят сразу; плановым только уведомление приходит вечером
   }
   function inspect(data, file, mode, short) {
     const lessons = data.lessons;
@@ -184,7 +182,7 @@ window.Admin = (() => {
         (note ? `<div class="card ${note.cls}"><p>${note.text}</p></div>` : "") +
         `<p>Сохраните Excel недели в программе учебной части, как обычно, и выберите, что делаете.</p><input type="file" id="adm-file" accept=".xlsx" hidden><div class="modes"><button class="mode blue" id="adm-new" ${published ? "" : "disabled"}><b>Новое расписание</b><small>На новую неделю. Студенты увидят сразу</small></button><button class="mode" id="adm-edit" ${
           published && eds.length ? "" : "disabled"
-        }><b>Изменить расписание</b><small>Исправленный файл этой недели. Студенты увидят ночью ${AT}</small></button><button class="mode urgent" id="adm-urgent" ${
+        }><b>Изменить расписание</b><small>Исправленный файл этой недели. Видно сразу, уведомление вечером ${AT}</small></button><button class="mode urgent" id="adm-urgent" ${
           published && eds.length ? "" : "disabled"
         }><b>Срочные изменения расписания</b><small>Исправленный файл этой недели. Студенты увидят сразу</small></button></div><div id="adm-draft"></div>` +
         `<details class="card" ${eds.length ? "open" : ""}><summary>Опубликовано сейчас: ${eds.length}</summary>${
@@ -274,7 +272,6 @@ window.Admin = (() => {
     const { data, name, info, mode } = draft;
     const n = U.now();
     const from = visibleFrom(mode, n);
-    const later = from > n;
     const teachers = new Set(data.lessons.map((l) => l.teacher).filter(Boolean)).size;
     let diffHtml = "";
     const dd = (d) => `${U.DAY_S[U.at(d).getDay()]} ${U.dm(d)}`;
@@ -301,7 +298,7 @@ window.Admin = (() => {
           ? info.stop.map((x) => `<p>${U.esc(x)}</p>`).join("") +
             (info.switchTo
               ? `<div class="actions">${info.switchTo
-                  .map((m) => `<button class="btn${m === "urgent" ? " red" : " blue"}" data-switch="${m}">${m === "edit" ? `Изменить (студенты увидят ${AT})` : m === "urgent" ? "Срочные изменения (сразу)" : "Опубликовать как новое"}</button>`)
+                  .map((m) => `<button class="btn${m === "urgent" ? " red" : " blue"}" data-switch="${m}">${m === "edit" ? `Изменить (уведомление ${AT})` : m === "urgent" ? "Срочные изменения (сразу)" : "Опубликовать как новое"}</button>`)
                   .join("")}</div>`
               : "")
           : `<p>Неделя ${U.esc(U.dm(info.dates[0]))}–${U.esc(U.dm(info.dates[info.dates.length - 1]))} · групп: ${info.groups.length} · преподавателей: ${teachers} · занятий: ${data.lessons.length}</p>`
@@ -312,11 +309,13 @@ window.Admin = (() => {
       (info.stop.length
         ? ""
         : `<div class="card when"><p id="adm-when">${
-            later
-              ? `Студенты увидят <b>${AT}</b>${C.hour >= 24 ? " (в полночь)" : ""}. Если нужно раньше — нажмите «Срочные изменения расписания».`
-              : mode === "edit"
-                ? `Уже позже ${C.hour}:00 — студенты увидят сразу.`
-                : "Студенты увидят <b>сразу</b>, через 1–2 минуты."
+            mode === "edit"
+              ? n.getHours() < NH
+                ? `Студенты увидят <b>сразу</b>, через 1–2 минуты, без уведомления. Уведомление тем, у кого поменялись пары, придёт <b>сегодня ${AT}</b>. Если нужно уведомить сразу — нажмите «Срочные изменения расписания».`
+                : `Студенты увидят <b>сразу</b>, через 1–2 минуты. Уже позже ${NH}:00 — уведомление тем, у кого поменялись пары, придёт сразу.`
+              : mode === "urgent"
+                ? "Студенты увидят <b>сразу</b>, через 1–2 минуты. Тем, у кого поменялись пары, сразу придёт уведомление «Срочные изменения»."
+                : "Студенты увидят <b>сразу</b>, через 1–2 минуты. Всем подписанным придёт уведомление «Новое расписание»."
           }</p></div>${
             info.warn.length ? '<div class="choice"><label><input type="checkbox" id="adm-sure"> <span>Я проверил замечания, файл правильный</span></label></div>' : ""
           }<div class="actions"><button class="btn blue" id="adm-publish" ${info.warn.length ? "disabled" : ""}>${mode === "urgent" ? "Опубликовать срочно" : isChange(mode) ? "Опубликовать изменения" : "Опубликовать"}</button><button class="btn" id="adm-cancel">Отмена</button></div>`);
@@ -354,7 +353,6 @@ window.Admin = (() => {
     btn.textContent = "Публикую…";
     const n = U.now();
     const from = visibleFrom(draft.mode, n);
-    const later = from > n;
     const ed = Pack.edition(draft.data, { id: n.getTime().toString(36), publishedAt: n.toISOString(), visibleFrom: from.toISOString(), kind: draft.mode, short: draft.short });
     const label = edLabel(ed);
     try {
@@ -375,9 +373,13 @@ window.Admin = (() => {
         cls: "ok",
         text:
           `<b>Опубликовано: ${U.esc(label)}${m === "urgent" ? " (срочные изменения)" : m === "edit" ? " (изменение)" : ""}.</b> ` +
-          (later ? `Студенты увидят ${AT}.` : "У студентов появится через 1–2 минуты.") +
+          "У студентов появится через 1–2 минуты." +
           (sd.length ? ` Сокращённые дни (пары по 1 часу): ${U.esc(sd.join(", "))}.` : "") +
-          (isChange(m) ? " Подписанным придёт уведомление, а в приложении будет плашка «Изменения в расписании»." : " Подписанным придёт уведомление о новом расписании."),
+          (m === "urgent"
+            ? " Тем, у кого поменялись пары, сразу придёт уведомление, в приложении будет плашка «Изменения в расписании»."
+            : m === "edit"
+              ? ` В приложении будет плашка «Изменения в расписании». Уведомление тем, у кого поменялись пары, придёт ${n.getHours() < NH ? "сегодня " + AT : "сразу"}.`
+              : " Подписанным придёт уведомление о новом расписании."),
       });
     } catch (e) {
       if (e.code === 401 || e.code === 403) {
