@@ -184,6 +184,7 @@
   /* изменения между прошлым и нынешним изданием недели, только для выбранной группы/преподавателя */
   function changes(w) {
     if (!w || !w.prev || !S.who) return [];
+    if (!mine(lessonsOf(w.prev)).length) return []; // у этой группы раньше на этой неделе ничего не было — это новое расписание, а не изменения
     const d = Pack.diff(lessonsOf(w.prev), lessonsOf(w.cur));
     const ids = new Set(mine(d.map((x) => x.l)).concat(mine(d.filter((x) => x.old).map((x) => x.old))));
     return d.filter((x) => ids.has(x.l) || (x.old && ids.has(x.old)));
@@ -299,7 +300,7 @@
     const today = iso(now());
     const my = mine(lessonsOf(w.cur));
     const seenKey = "rasp-seen:" + S.who.type + ":" + S.who.v;
-    const fresh = w.prev && LS.get(seenKey) !== w.cur.id; // учебная часть изменила расписание, а этот человек ещё не видел
+    const fresh = w.prev && LS.get(seenKey) !== w.cur.id && mine(lessonsOf(w.prev)).length > 0; // учебная часть изменила расписание, а этот человек ещё не видел
     const shortNew = w.prev ? Pack.shortAdded(w.prev, w.cur) : []; // учебная часть отметила сокращённые дни
     const showBanner = fresh && (ch.length || shortNew.length);
     const showQuiet = fresh && !ch.length && !shortNew.length;

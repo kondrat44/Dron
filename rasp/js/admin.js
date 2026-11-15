@@ -105,18 +105,31 @@ window.Admin = (() => {
     const eds = ((file && file.editions) || []).slice().sort((a, b) => a.publishedAt.localeCompare(b.publishedAt));
     const same = eds.filter((e) => e.week === week).pop() || null;
     const last = same || eds[eds.length - 1] || null;
-    if (last) {
+    const sortG = (a) => a.sort((x, y) => x.localeCompare(y, "ru", { numeric: true }));
+    const listG = (a) => (a.length > 12 ? sortG(a).slice(0, 12).join(", ") + ` и ещё ${a.length - 12}` : sortG(a).join(", "));
+    /* файл одного отделения: группы, которых в файле нет, остаются как были в опубликованной неделе */
+    const fileGroups = new Set(groups);
+    const keep = same ? Pack.unpack(same).filter((l) => l.groups.every((g) => !fileGroups.has(g))) : [];
+    const kept = [...new Set(keep.flatMap((l) => l.groups))];
+    const overlap = same ? same.T.g.filter((g) => fileGroups.has(g)) : [];
+    const merged = keep.length
+      ? { ...data, lessons: data.lessons.concat(keep.map((l) => ({ date: l.date, period: l.period, groups: l.groups, subgroup: l.sub, subject: l.subject, teacher: l.teacher, room: l.room, start: l.start, end: l.end }))) }
+      : data;
+    if (last && !same) {
       const was = new Set(last.T.g);
       const gone = [...was].filter((g) => !groups.includes(g));
-      if (gone.length) warn.push((gone.length > 1 ? "В файле нет групп, которые были в прошлый раз: " : "В файле нет группы, которая была в прошлый раз: ") + gone.sort((a, b) => a.localeCompare(b, "ru", { numeric: true })).join(", ") + ".");
-      if (lessons.length < last.L.length * 0.6) warn.push(`Пар заметно меньше, чем в прошлый раз: ${lessons.length} вместо ${last.L.length}.`);
+      if (gone.length) warn.push((gone.length > 1 ? `В файле нет ${gone.length} групп, которые были в прошлый раз: ` : "В файле нет группы, которая была в прошлый раз: ") + listG(gone) + ". Если это файл одного отделения — остальные отделения потом можно добавить своими файлами.");
+      if (lessons.length < last.L.length * 0.6 && !gone.length) warn.push(`Пар заметно меньше, чем в прошлый раз: ${lessons.length} вместо ${last.L.length}.`);
     }
+    if (same && isChange(mode) && overlap.length && merged.lessons.length < same.L.length * 0.6) warn.push(`Пар заметно меньше, чем сейчас на сайте: ${merged.lessons.length} вместо ${same.L.length}.`);
     /* новое или изменение: проверяем, что кнопка нажата та */
     let switchTo = null,
       diff = null;
     const wk = dates.length ? U.dm(dates[0]) + "–" + U.dm(dates[dates.length - 1]) : "";
-    if (!stop.length && mode === "new" && same) {
-      stop.push(`Расписание на неделю ${wk} уже опубликовано. Если это исправленный файл этой недели — опубликуйте его как изменение.`);
+    /* «Новое расписание» на уже опубликованную неделю можно, если в файле другие группы (другое отделение) — добавляем */
+    const adding = mode === "new" && same && !overlap.length;
+    if (!stop.length && mode === "new" && same && !adding) {
+      stop.push(`Расписание на неделю ${wk} уже опубликовано${overlap.length < groups.length ? ` (из этого файла уже есть ${overlap.length} групп из ${groups.length})` : ""}. Если это исправленный файл этой недели — опубликуйте его как изменение.`);
       switchTo = ["edit", "urgent"];
     }
     if (!stop.length && isChange(mode) && !same) {
@@ -130,10 +143,10 @@ window.Admin = (() => {
     const shortRemoved = same ? Pack.shortAdded(sh, same) : [];
     if (!stop.length && same) {
       const n = U.now().toISOString();
-      diff = Pack.diff(Pack.unpack(same), Pack.unpack(Pack.edition(data, { id: "draft", publishedAt: n, visibleFrom: n, short: sh.short })));
+      diff = Pack.diff(Pack.unpack(same), Pack.unpack(Pack.edition(merged, { id: "draft", publishedAt: n, visibleFrom: n, short: sh.short })));
       if (isChange(mode) && !diff.length && Pack.shortSame(same, sh)) stop.push("Этот файл ничем не отличается от последнего загруженного расписания недели " + wk + ". Публиковать нечего. Если нужно только отметить сокращённый день — поставьте галочку ниже.");
     }
-    return { groups, dates, week, stop, warn, same, switchTo, diff, short: sh.short, shortAdded, shortRemoved };
+    return { groups, dates, week, stop, warn, same, switchTo, diff, short: sh.short, shortAdded, shortRemoved, merged, kept, adding };
   }
 
   /* ---------- экран ---------- */
@@ -245,6 +258,9 @@ window.Admin = (() => {
     try {
       if (!/\.xlsx$/i.test(f.name)) throw Error("Нужен файл Excel (.xlsx)");
       const data = await Reader.read(f);
+      /* «Ковалев Н. Т.» и «Ковалёв Н. Т.», «Швецов» и «Швецов Г. А.» — один преподаватель, как уже на сайте */
+      const known = [...new Set(((published && published.file.editions) || []).flatMap((e) => e.T.t))];
+      Reader.canonTeachers(data.lessons, known);
       draft = { data, name: f.name, mode, info: inspect(data, published && published.file, mode) };
       draft.short = draft.info.short;
       showDraft();
@@ -277,6 +293,7 @@ window.Admin = (() => {
     const dd = (d) => `${U.DAY_S[U.at(d).getDay()]} ${U.dm(d)}`;
     const shortLines = info.shortAdded.map((d) => `<li><b>${dd(d)} — сокращённый день</b>, пары по 1 часу</li>`).concat(info.shortRemoved.map((d) => `<li><b>${dd(d)} — обычный день</b> (сокращённый отменён)</li>`));
     if (info.diff && !info.stop.length && !info.diff.length && shortLines.length) diffHtml = `<details class="card" open><summary>Что изменилось по сравнению с опубликованным</summary><ul>${shortLines.join("")}</ul></details>`;
+    else if (info.adding && !info.stop.length) diffHtml = `<div class="card"><p>Неделя уже опубликована для других групп. Этот файл <b>добавится</b> к ней: ${info.groups.length} групп. Остальные ${info.kept.length} групп остаются как были.</p></div>`;
     else if (info.diff && !info.stop.length) {
       const d = info.diff;
       const line = (x) => {
@@ -301,7 +318,11 @@ window.Admin = (() => {
                   .map((m) => `<button class="btn${m === "urgent" ? " red" : " blue"}" data-switch="${m}">${m === "edit" ? `Изменить (уведомление ${AT})` : m === "urgent" ? "Срочные изменения (сразу)" : "Опубликовать как новое"}</button>`)
                   .join("")}</div>`
               : "")
-          : `<p>Неделя ${U.esc(U.dm(info.dates[0]))}–${U.esc(U.dm(info.dates[info.dates.length - 1]))} · групп: ${info.groups.length} · преподавателей: ${teachers} · занятий: ${data.lessons.length}</p>`
+          : `<p>Неделя ${U.esc(U.dm(info.dates[0]))}–${U.esc(U.dm(info.dates[info.dates.length - 1]))} · групп: ${info.groups.length} · преподавателей: ${teachers} · занятий: ${data.lessons.length}</p>${
+              info.kept.length && !info.adding ? `<p>Других групп в этом файле нет — их ${info.kept.length} групп остаются как были на сайте.</p>` : ""
+            }${
+              data.noTeachers ? "<p>В этом виде файла у пар нет преподавателей: студенты увидят предмет и кабинет; у физкультуры и иностранного языка — преподаватель из строк внизу листа.</p>" : ""
+            }`
       }</div>` +
       shortBlock(info) +
       (info.warn.length ? `<div class="card warn"><h3>Проверьте</h3><ul>${info.warn.map((x) => `<li>${U.esc(x)}</li>`).join("")}</ul></div>` : "") +
@@ -353,7 +374,7 @@ window.Admin = (() => {
     btn.textContent = "Публикую…";
     const n = U.now();
     const from = visibleFrom(draft.mode, n);
-    const ed = Pack.edition(draft.data, { id: n.getTime().toString(36), publishedAt: n.toISOString(), visibleFrom: from.toISOString(), kind: draft.mode, short: draft.short });
+    const ed = Pack.edition(draft.info.merged || draft.data, { id: n.getTime().toString(36), publishedAt: n.toISOString(), visibleFrom: from.toISOString(), kind: draft.mode, short: draft.short });
     const label = edLabel(ed);
     try {
       for (let attempt = 0; ; attempt++) {
