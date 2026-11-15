@@ -43,7 +43,9 @@
   const S = {
     file: null, // опубликованный файл
     offline: false,
-    weeks: [],
+    weeks: [], // недели, которые ещё актуальны (прошедшие студентам не показываем)
+    allWeeks: [], // все опубликованные — для списка групп и преподавателей
+    target: "", // понедельник недели, расписание которой сейчас нужно студентам
     nextFlip: null,
     wi: 0, // выбранная неделя
     day: "", // выбранный день
@@ -101,10 +103,22 @@
     if (!silent && S.offline && S.file) toast("Нет интернета — показано сохранённое расписание");
   }
   let flipTimer = null;
+  /* какая неделя нужна сейчас: эта; в воскресенье — следующая */
+  const targetWeek = () => {
+    const today = iso(now());
+    const mon = Pack.mondayOf(today);
+    return now().getDay() === 0 ? addDays(mon, 7) : mon;
+  };
+  /* последний учебный день недели: суббота, или воскресенье, если в нём есть пары */
+  const lastDay = (w) => (w.dates.includes(addDays(w.week, 6)) ? addDays(w.week, 6) : addDays(w.week, 5));
   function compute() {
-    const before = S.weeks.map((w) => w.cur.id).join();
+    const before = S.allWeeks.map((w) => w.cur.id).join();
     const v = Pack.view(S.file, now());
-    S.weeks = v.weeks;
+    const today = iso(now());
+    S.allWeeks = v.weeks;
+    /* прошедшие недели не показываем: старое расписание вместо нового только путает */
+    S.weeks = v.weeks.filter((w) => lastDay(w) >= today);
+    S.target = targetWeek();
     S.nextFlip = v.nextFlip;
     clearTimeout(flipTimer);
     if (v.nextFlip) {
@@ -116,9 +130,8 @@
         }, ms + 500);
     }
     /* приложение открыто, а учебная часть опубликовала изменения */
-    if (before && before !== S.weeks.map((w) => w.cur.id).join()) toast("Расписание изменилось");
+    if (before && before !== S.allWeeks.map((w) => w.cur.id).join()) toast("Расписание изменилось");
     if (!S.weeks.length) return;
-    const today = iso(now());
     if (!S.userPicked || !S.weeks[S.wi] || before !== S.weeks.map((w) => w.cur.id).join()) {
       if (!S.userPicked || !S.weeks[S.wi]) {
         /* неделя: та, где сегодня; иначе ближайшая будущая; иначе последняя */
@@ -261,9 +274,16 @@
     $("who-btn").textContent = S.who ? S.who.v : "Выбрать";
     $("who-btn").title = S.who ? TYPE[S.who.type] + ": " + S.who.v + " — нажмите, чтобы сменить" : "Выбрать группу";
     if (!S.file || !S.weeks.length) {
-      app.innerHTML = `<div class="empty"><b>Расписание ещё не опубликовано</b>${
-        S.offline ? "Нет интернета. Подключитесь и откройте ещё раз." : "Загляните позже."
-      }</div>${foot()}`;
+      /* актуального расписания нет: старое не показываем, пишем, что новое ещё не добавили */
+      const wl = weekLabel({ week: S.target || targetWeek() });
+      app.innerHTML = `<div class="empty waiting"><b>Расписание на ${esc(wl)} ещё не добавили</b>${
+        S.offline
+          ? "Нет интернета. Подключитесь — и расписание обновится."
+          : `Учебная часть пока не опубликовала расписание на эту неделю. Как только его добавят, оно сразу появится здесь.${
+              Push.on() ? " Придёт уведомление «Новое расписание»." : Push.can() && S.who ? " Включите уведомления — телефон сообщит, когда расписание появится." : ""
+            }`
+      }${S.who ? "" : `<div class="foot-actions"><button class="btn blue" id="pick-now">Выбрать группу</button></div>`}</div>${foot()}`;
+      if ($("pick-now")) $("pick-now").onclick = () => picker();
       bindFoot();
       return;
     }
@@ -323,6 +343,7 @@
           return `<button class="day-btn${d === S.day && S.mode === "day" ? " on" : ""}${n ? "" : " none"}${d === today ? " today" : ""}${c ? " chg" : ""}" data-day="${d}" aria-pressed="${d === S.day && S.mode === "day"}" aria-label="${DAY[at(d).getDay()]}, ${dm(d)}${d === today ? ", сегодня" : ""}${c ? ", есть изменения" : ""}"><b>${DAY_S[at(d).getDay()]}</b><small>${dm(d)}</small></button>`;
         })
         .join("")}</nav>` +
+      (S.wi === 0 && w.week > S.target && now().getDay() !== 0 ? `<div class="note">Расписание на ${esc(weekLabel({ week: S.target }))} ещё не добавили. Показана следующая неделя.</div>` : "") +
       (unknown ? `<div class="note">В расписании этой недели нет: ${esc(TYPE[S.who.type].toLowerCase())} «${esc(S.who.v)}». Проверьте выбор — нажмите на название вверху.</div>` : "") +
       `<div id="list">${
         S.mode === "day"
@@ -457,7 +478,7 @@
   /* выбор группы / преподавателя / кабинета */
   function picker(type) {
     type = type || (S.who && S.who.type) || "g";
-    const all = S.weeks.flatMap((w) => lessonsOf(w.cur));
+    const all = S.allWeeks.flatMap((w) => lessonsOf(w.cur));
     const sortRu = (a, b) => a.localeCompare(b, "ru", { numeric: true });
     const lists = {
       g: [...new Set(all.flatMap((l) => l.groups))].sort(sortRu),
@@ -542,6 +563,7 @@
         ["Изменения видно сразу", "Если учебная часть поменяла пары, сверху появится жёлтая плашка, а изменённые пары отмечены «изменено», «новая» или «снята»."],
         ["Когда меняется расписание", "Изменения видно сразу. Уведомление о срочных изменениях приходит сразу, об обычных — вечером в 18:00."],
         ["Сокращённый день", "Перед праздником учебная часть может отметить сокращённый день: над парами будет «⏱ Сокращённый день», пары по 1 часу, как в субботу."],
+        ["Новая неделя", "Прошлое расписание не показывается. Если на новую неделю расписание ещё не добавили, приложение так и напишет — и обновится само, когда его опубликуют."],
         ["Без интернета", "Показывается последнее сохранённое расписание. Обновится само, когда появится интернет."],
       ],
       fix: "",
@@ -567,7 +589,7 @@
     const done = () => {
       LS.set("rasp-help", "seen");
       closeSheet();
-      if (!S.who && S.weeks.length) setTimeout(() => picker(), 340);
+      if (!S.who && S.allWeeks.length) setTimeout(() => picker(), 340);
     };
     $("help-ok").onclick = done;
     if ($("sheet-x")) $("sheet-x").onclick = done;
@@ -718,7 +740,7 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => (t.hidden = true), 3800);
   }
-  $("who-btn").onclick = () => (S.weeks.length ? picker() : toast("Расписание ещё не опубликовано"));
+  $("who-btn").onclick = () => (S.allWeeks.length ? picker() : toast("Расписание ещё не опубликовано"));
   $("theme-btn").onclick = () => {
     const dark = document.documentElement.dataset.theme !== "dark";
     document.documentElement.dataset.theme = dark ? "dark" : "light";
@@ -755,7 +777,12 @@
     }
   });
   setInterval(() => document.visibilityState === "visible" && load(true), 5 * 60 * 1000);
-  setInterval(() => document.visibilityState === "visible" && $("scrim").hidden && S.who && S.weeks.length && render(), 60 * 1000);
+  /* раз в минуту: отметка «идёт сейчас», а в полночь — смена актуальной недели */
+  setInterval(() => {
+    if (document.visibilityState !== "visible" || !$("scrim").hidden) return;
+    compute();
+    render();
+  }, 60 * 1000);
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(() => {});
   window.Rasp = { load, render, picker, admin, toast, help };
   load(true).then(() => {
@@ -763,6 +790,6 @@
     if (Push.on() && S.who && (Date.now() - ps.at > 3 * 86400e3 || JSON.stringify(ps.who) !== JSON.stringify(S.who))) Push.sync();
     if (location.hash === "#admin") admin();
     else if (location.hash === "#help" || !LS.get("rasp-help")) help();
-    else if (S.weeks.length && !S.who) picker();
+    else if (S.allWeeks.length && !S.who) picker();
   });
 })();
