@@ -10,5 +10,5 @@ window.RASP = {
   push: "https://rasp-push.hthtt5664.workers.dev", // сервер уведомлений о заменах (Cloudflare, папка push/)
   pushKey: "BCU7BrMsYnOuwqzLoxvl6O1FKcnxNr85oBaWddPn-VwMbxWqnm6hLKqJcW6j5spfrXVLE4SdDgnSpSboWBQI9UU", // открытый ключ сервера уведомлений
   contact: "ihor.kondrat@yandex.ru", // «Нашли ошибку?» внизу сайта
-  v: "20261117023731", // версия сборки, ставится автоматически
+  v: "20261117025046", // версия сборки, ставится автоматически
 };

@@ -763,6 +763,16 @@
   };
   const themeColor = () => document.querySelector('meta[name="theme-color"]').setAttribute("content", document.documentElement.dataset.theme === "dark" ? "#161618" : "#ffffff");
   themeColor();
+  /* пока человек сам не переключал тему кнопкой — следуем за телефоном, даже если режим поменялся при открытом сайте */
+  if (window.matchMedia) {
+    const mq = matchMedia("(prefers-color-scheme: dark)");
+    const follow = () => {
+      if (LS.get("rasp-theme")) return;
+      document.documentElement.dataset.theme = mq.matches ? "dark" : "light";
+      themeColor();
+    };
+    mq.addEventListener ? mq.addEventListener("change", follow) : mq.addListener && mq.addListener(follow);
+  }
   /* листание дней пальцем */
   let tx = 0,
     ty = 0;
