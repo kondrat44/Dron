@@ -553,7 +553,7 @@
     const recent = LS.json("rasp-recent", []).filter((x) => lists[x.type] && lists[x.type].includes(x.v));
     const item = (t, v) => `<button class="pick${S.who && S.who.type === t && S.who.v === v ? " on" : ""}" data-t="${t}" data-v="${esc(v)}">${esc(v)}</button>`;
     openSheet(
-      `<div class="sheet-head"><h2>Чьё расписание?</h2>${S.who ? '<button class="x-btn" id="sheet-x" aria-label="Закрыть">×</button>' : ""}</div><div class="seg" role="group">${Object.entries(TYPE)
+      `<div class="sheet-head"><h2>Чьё расписание?</h2><button class="x-btn" id="sheet-x" aria-label="Закрыть">×</button></div><div class="seg" role="group">${Object.entries(TYPE)
         .map(([t, name]) => `<button data-type="${t}" aria-pressed="${t === type}">${name}</button>`)
         .join("")}</div><input class="inp" id="pick-q" type="search" inputmode="search" autocomplete="off" placeholder="${
         type === "g" ? "Поиск: 23-БС" : "Поиск по фамилии"
@@ -561,7 +561,11 @@
         recent.length ? `<p class="sub-h">Недавние</p><div class="pick-grid" id="pick-recent">${recent.map((x) => item(x.type, x.v)).join("")}</div><p class="sub-h">Все</p>` : ""
       }<div class="${type === "g" ? "pick-grid" : "pick-list"}" id="pick-all">${lists[type].map((v) => item(type, v)).join("")}</div><p class="hint" id="pick-none" hidden>Ничего не найдено.</p>`,
     );
-    if ($("sheet-x")) $("sheet-x").onclick = closeSheet;
+    if ($("sheet-x"))
+      $("sheet-x").onclick = () => {
+        if (!S.who) LS.set("rasp-skip-pick", "1"); // закрыли без выбора — больше не открывать само
+        closeSheet();
+      };
     $("sheet").querySelectorAll("[data-type]").forEach((b) => (b.onclick = () => picker(b.dataset.type)));
     const norm = (s) => s.toLowerCase().replace(/ё/g, "е").replace(/[\s.\-]+/g, "");
     $("pick-q").oninput = () => {
@@ -641,7 +645,7 @@
       inst = standalone();
     const first = !LS.get("rasp-help");
     openSheet(
-      `<div class="sheet-head"><h2>Как пользоваться</h2>${S.who ? '<button class="x-btn" id="sheet-x" aria-label="Закрыть">×</button>' : ""}</div><div class="seg" role="group" aria-label="Телефон">${Object.entries(HELP)
+      `<div class="sheet-head"><h2>Как пользоваться</h2><button class="x-btn" id="sheet-x" aria-label="Закрыть">×</button></div><div class="seg" role="group" aria-label="Телефон">${Object.entries(HELP)
         .map(([k, x]) => `<button data-help="${k}" aria-pressed="${k === tab}">${x.name}</button>`)
         .join("")}</div>${
         inst && tab !== "use" ? '<div class="card ok"><p>✓ Приложение уже на экране телефона — осталось выбрать группу и включить уведомления.</p></div>' : ""
@@ -658,7 +662,12 @@
       if (!S.who && S.allWeeks.length) setTimeout(() => picker(), 340);
     };
     $("help-ok").onclick = done;
-    if ($("sheet-x")) $("sheet-x").onclick = done;
+    /* крестик — просто закрыть (например, учебной части на компьютере), группу можно выбрать потом кнопкой «Выбрать» */
+    $("sheet-x").onclick = () => {
+      LS.set("rasp-help", "seen");
+      if (!S.who) LS.set("rasp-skip-pick", "1");
+      closeSheet();
+    };
     if (first) LS.set("rasp-help", "seen");
   }
 
@@ -916,6 +925,6 @@
     if (Push.on() && S.who && (Date.now() - ps.at > 3 * 86400e3 || JSON.stringify(ps.who) !== JSON.stringify(S.who))) Push.sync();
     if (location.hash === "#admin") admin();
     else if (location.hash === "#help" || !LS.get("rasp-help")) help();
-    else if (S.allWeeks.length && !S.who) picker();
+    else if (S.allWeeks.length && !S.who && !LS.get("rasp-skip-pick")) picker();
   });
 })();
