@@ -400,7 +400,16 @@
   function foot(w) {
     return `<footer class="foot">${w ? `<p>Расписание от ${esc(whenText(w.cur.publishedAt))}</p>` : ""}<div class="foot-actions"><button class="btn" id="refresh">Обновить</button>${
       S.who ? '<button class="btn" id="change-who">Сменить группу</button>' : ""
-    }</div>${pushFoot()}<button class="link" id="help-link">Инструкция для iPhone и Android</button><br><button class="link" id="admin-link">Вход для учебной части</button></footer>`;
+    }</div>${pushFoot()}<button class="link" id="help-link">Инструкция для iPhone и Android</button><br>${
+      C.contact ? `<p class="report">Нашли ошибку или проблему? <a href="${esc(reportLink())}">Напишите: ${esc(C.contact)}</a></p>` : ""
+    }<button class="link" id="admin-link">Вход для учебной части</button></footer>`;
+  }
+  /* письмо с ошибкой: тема и подсказка, что написать; группа и версия — чтобы было понятно, где искать */
+  function reportLink() {
+    const who = S.who ? `${TYPE[S.who.type]}: ${S.who.v}` : "не выбрана";
+    const dev = /iphone|ipad/i.test(navigator.userAgent) ? "iPhone" : /android/i.test(navigator.userAgent) ? "Android" : "компьютер";
+    const body = `Что не так:\n\n\n---\n${who}\nТелефон: ${dev}${standalone() ? " (со значка)" : ""}\nВерсия сайта: ${C.v}`;
+    return `mailto:${C.contact}?subject=${encodeURIComponent("Расписание КузТАГиС: ошибка")}&body=${encodeURIComponent(body)}`;
   }
   function bindFoot() {
     if ($("refresh"))

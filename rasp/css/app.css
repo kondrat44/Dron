@@ -159,6 +159,8 @@ html[data-theme="dark"] .tag.sg { background: rgba(255, 255, 255, 0.12); }
 .foot p { margin: 4px 0; }
 .foot-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 12px 0; }
 .push-line { color: var(--ink2); }
+.foot .report { margin: 6px 0 2px; }
+.foot .report a { color: var(--accent); text-decoration: none; }
 .push-line .link { display: inline; padding: 0; }
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 0; border-radius: 980px; padding: 10px 18px; font-weight: 500; font-size: 0.95rem; background: var(--fill); color: var(--ink); min-height: 42px; }
 .btn.blue { background: var(--accent); color: #fff; }
