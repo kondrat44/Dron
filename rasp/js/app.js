@@ -859,6 +859,22 @@
     compute();
     render();
   }, 60 * 1000);
+  /* посещаемость: «зашёл на сайт» (без имени и группы — только случайный номер устройства, платформа и «со значка») */
+  let hitAt = 0;
+  function hit() {
+    if (!C.push || Date.now() - hitAt < 30 * 60e3 || (/^(localhost|127\.)/.test(location.hostname) && !window.__HIT)) return;
+    hitAt = Date.now();
+    let id = LS.get("rasp-vid");
+    if (!id) LS.set("rasp-vid", (id = Math.random().toString(36).slice(2, 12) + Date.now().toString(36).slice(-4)));
+    const ua = navigator.userAgent;
+    const p = /android/i.test(ua) ? "android" : isIos() ? "ios" : /windows|macintosh|linux|cros/i.test(ua) ? "pc" : "other";
+    const body = JSON.stringify({ id, p, app: standalone() });
+    try {
+      if (!(navigator.sendBeacon && navigator.sendBeacon(C.push + "/hit", body))) fetch(C.push + "/hit", { method: "POST", body, keepalive: true, mode: "no-cors" }).catch(() => {});
+    } catch {}
+  }
+  hit();
+  document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && hit());
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(() => {});
   window.Rasp = { load, render, picker, admin, toast, help };
   Promise.all([load(true), window.raspSplash]).then(() => {

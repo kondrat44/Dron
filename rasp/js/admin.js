@@ -209,7 +209,7 @@ window.Admin = (() => {
                 )
                 .join("")
             : "<p>Пока ничего не опубликовано.</p>"
-        }</details><div class="actions"><a class="btn" id="adm-doc" href="instrukciya-uchebnaya.docx" download="Инструкция для учебной части - Расписание КузТАГиС.docx">📄 Инструкция для учебной части (Word)</a><button class="btn" id="adm-out">Выйти (стереть ключ с этого компьютера)</button></div>`,
+        }</details><details class="card" id="adm-visits"><summary>Посещаемость сайта</summary><div id="adm-vbox"><p class="hint">Загружаю…</p></div></details><div class="actions"><a class="btn" id="adm-doc" href="instrukciya-uchebnaya.docx" download="Инструкция для учебной части - Расписание КузТАГиС.docx">📄 Инструкция для учебной части (Word)</a><button class="btn" id="adm-out">Выйти (стереть ключ с этого компьютера)</button></div>`,
     );
     U.$("sheet-x").onclick = U.closeSheet;
     U.$("adm-out").onclick = () => {
@@ -218,6 +218,7 @@ window.Admin = (() => {
       U.closeSheet();
       U.toast("Ключ стёрт с этого компьютера");
     };
+    U.$("adm-visits").ontoggle = () => U.$("adm-visits").open && visits();
     let mode = "new";
     for (const m of Object.keys(MODE))
       U.$("adm-" + m).onclick = () => {
@@ -251,6 +252,58 @@ window.Admin = (() => {
         }),
     );
     if (draft) showDraft();
+  }
+  /* посещаемость: счётчик на сервере уведомлений, смотреть можно только с ключом учебной части */
+  async function visits() {
+    const box = U.$("adm-vbox");
+    if (!box) return;
+    box.innerHTML = '<p class="hint">Загружаю…</p>';
+    let j;
+    try {
+      const r = await fetch(C.push + "/visits", { headers: { Authorization: "Bearer " + key() }, cache: "no-store" });
+      j = await r.json();
+      if (!r.ok || !j.ok) throw Error(r.status === 401 ? "Ключ не подошёл" : "Сервер ответил " + r.status);
+    } catch (e) {
+      box.innerHTML = `<p class="hint">Не удалось загрузить: ${U.esc(e.message === "Failed to fetch" ? "нет связи" : e.message)}. <button class="link" id="adm-vre">Ещё раз</button></p>`;
+      U.$("adm-vre").onclick = visits;
+      return;
+    }
+    const byDay = Object.fromEntries(j.days.map((d) => [d.day, d]));
+    const shift = (n) => {
+      const d = new Date(j.today + "T12:00:00Z");
+      d.setUTCDate(d.getUTCDate() - n);
+      return d.toISOString().slice(0, 10);
+    };
+    const sum = (n) => {
+      const s = { n: 0, u: 0, ios: 0, android: 0, pc: 0, other: 0, app: 0, days: 0 };
+      for (let i = 0; i < n; i++) {
+        const d = byDay[shift(i)];
+        if (!d) continue;
+        s.days++;
+        for (const k of Object.keys(s)) if (k !== "days") s[k] += d[k] || 0;
+      }
+      return s;
+    };
+    const num = (x) => String(x).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+    const t = sum(1), y = byDay[shift(1)] || { n: 0, u: 0 }, w = sum(7), m = sum(30);
+    const tile = (label, a, b) => `<div class="vt"><small>${label}</small><b>${num(a)}</b><span>${b}</span></div>`;
+    const pl = w.u ? w : sum(60);
+    const pct = (x) => (pl.u ? Math.round((x / pl.u) * 100) : 0);
+    const bar = (label, x) => `<div class="vbar"><span>${label}</span><i style="--w:${pct(x)}%"></i><b>${pct(x)}%</b></div>`;
+    const first = j.days.length ? j.days[j.days.length - 1].day : j.today;
+    box.innerHTML =
+      `<div class="vtiles">${tile("Сегодня", t.n, "заходов · " + num(t.u) + " чел.")}${tile("Вчера", y.n, "заходов · " + num(y.u) + " чел.")}${tile("7 дней", w.n, "заходов · ~" + num(Math.round(w.u / 7)) + " чел. в день")}${tile("30 дней", m.n, "заходов")}</div>` +
+      `<p>Всего разных телефонов и компьютеров: <b>${num(j.devices)}</b></p>` +
+      `<h4>С чего заходят${w.u ? " (7 дней)" : ""}</h4>${bar("iPhone", pl.ios)}${bar("Android", pl.android)}${bar("Компьютер", pl.pc)}${pl.other ? bar("Другое", pl.other) : ""}` +
+      `<p class="hint">Со значка на экране «Домой» (как приложение): ${pct(pl.app)}%</p>` +
+      `<table class="vtab"><tr><th>День</th><th>Заходов</th><th>Чел.</th><th>iPhone</th><th>Android</th><th>ПК</th></tr>${Array.from({ length: 14 }, (_, i) => shift(i))
+        .filter((d) => d >= first)
+        .map((d) => {
+          const x = byDay[d] || { n: 0, u: 0, ios: 0, android: 0, pc: 0 };
+          return `<tr><td>${U.dm(d)}</td><td>${num(x.n)}</td><td>${num(x.u)}</td><td>${x.ios}</td><td>${x.android}</td><td>${x.pc}</td></tr>`;
+        })
+        .join("")}</table>` +
+      `<p class="hint">Заход — открыли сайт (повторно считается через 30 минут). Человек — одно устройство за день. Считается с ${U.dm(first)}; имён и групп сервер не знает.</p>`;
   }
   async function parse(f, mode) {
     const box = U.$("adm-draft");
