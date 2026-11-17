@@ -10,10 +10,10 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Расписание" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <link rel="manifest" href="manifest.webmanifest?v=20261117022347" />
-    <link rel="icon" href="icons/logo.svg?v=20261117022347" />
-    <link rel="apple-touch-icon" href="icons/apple-180.png?v=20261117022347" />
-    <link rel="stylesheet" href="css/app.css?v=20261117022347" />
+    <link rel="manifest" href="manifest.webmanifest?v=20261117023731" />
+    <link rel="icon" href="icons/logo.svg?v=20261117023731" />
+    <link rel="apple-touch-icon" href="icons/apple-180.png?v=20261117023731" />
+    <link rel="stylesheet" href="css/app.css?v=20261117023731" />
     <script>
       try {
         var t = localStorage.getItem("rasp-theme");
@@ -27,10 +27,54 @@
     </script>
   </head>
   <body>
+    <div class="splash" id="splash" hidden><div class="splash-in"><div class="splash-logo" id="splash-logo"></div><div class="splash-name"><b>Расписание</b><small>КузТАГиС</small></div></div></div>
+    <script>
+      /* заставка — один раз за открытие; без неё, если в телефоне выключена анимация */
+      (function () {
+        var sp = document.getElementById("splash"), ready;
+        window.raspSplash = new Promise(function (r) { ready = r; }); // app.js ждёт конца заставки, прежде чем открыть окна
+        try {
+          if (sessionStorage.getItem("rasp-splash") || matchMedia("(prefers-reduced-motion: reduce)").matches) return sp.remove(), ready();
+          sessionStorage.setItem("rasp-splash", "1");
+        } catch (e) {
+          return sp.remove(), ready();
+        }
+        sp.hidden = false;
+        var done = false, t0 = Date.now();
+        function finish() {
+          if (done) return;
+          done = true;
+          var logo = document.getElementById("splash-logo"), target = document.querySelector(".brand img");
+          var a = logo.getBoundingClientRect(), b = target && target.getBoundingClientRect();
+          if (b && b.width && a.width) {
+            logo.style.transition = "transform 0.5s cubic-bezier(0.32, 0.72, 0, 1)";
+            logo.style.transform = "translate(" + (b.left - a.left) + "px," + (b.top - a.top) + "px) scale(" + b.width / a.width + ")";
+            target.style.visibility = "hidden";
+          }
+          sp.classList.add("go");
+          setTimeout(function () {
+            sp.classList.add("out");
+            if (target) target.style.visibility = "";
+            setTimeout(function () { sp.remove(); ready(); }, 360);
+          }, 520);
+        }
+        sp.addEventListener("click", finish);
+        fetch("icons/logo.svg?v=20261117023731")
+          .then(function (r) { return r.text(); })
+          .then(function (t) {
+            var box = document.getElementById("splash-logo");
+            box.innerHTML = t;
+            box.querySelectorAll("path").forEach(function (p) { p.setAttribute("pathLength", "1"); p.removeAttribute("fill"); });
+            setTimeout(finish, Math.max(0, 1550 - (Date.now() - t0)));
+          })
+          .catch(function () { setTimeout(finish, 200); });
+        setTimeout(finish, 3000); // на всякий случай
+      })();
+    </script>
     <header class="top">
       <div class="top-in">
         <a class="brand" href="./" aria-label="Расписание КузТАГиС">
-          <img src="icons/logo.svg?v=20261117022347" alt="" width="36" height="36" />
+          <img src="icons/logo.svg?v=20261117023731" alt="" width="36" height="36" />
           <span><b>Расписание</b><small>КузТАГиС</small></span>
         </a>
         <div class="top-actions">
@@ -50,9 +94,9 @@
     </div>
     <div id="toast" class="toast" role="status" hidden></div>
     <noscript><p style="padding: 24px">Для просмотра расписания включите JavaScript.</p></noscript>
-    <script src="js/config.js?v=20261117022347"></script>
-    <script src="js/pack.js?v=20261117022347"></script>
-    <script src="js/app.js?v=20261117022347"></script>
+    <script src="js/config.js?v=20261117023731"></script>
+    <script src="js/pack.js?v=20261117023731"></script>
+    <script src="js/app.js?v=20261117023731"></script>
     <!-- Cloudflare Web Analytics: только число открытий, без cookies и личных данных -->
     <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "05719f09095748d89c0927b5fe0cf9b1"}'></script>
   </body>

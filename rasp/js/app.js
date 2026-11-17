@@ -270,6 +270,7 @@
     const d = new Date(isoTime);
     return `${DAY_S[d.getDay()].toLowerCase()} ${dm(iso(d))} в ${hm(d)}`;
   };
+  let shownDay = ""; // какой день был на экране — для плавного сдвига при смене дня
   function render() {
     const app = $("app");
     $("who-btn").textContent = S.who ? S.who.v : "Выбрать";
@@ -385,6 +386,9 @@
     );
     bindFoot();
     bindInstall();
+    /* смена дня — лёгкий сдвиг влево/вправо */
+    if (S.mode === "day" && shownDay && shownDay !== S.day && $("list")) $("list").classList.add(S.day > shownDay ? "slide-l" : "slide-r");
+    shownDay = S.mode === "day" ? S.day : "";
   }
   const dayTitle = (d, today) =>
     `<div class="day-title"><h2>${d === today ? "Сегодня" : d === addDays(today, 1) ? "Завтра" : DAY[at(d).getDay()][0].toUpperCase() + DAY[at(d).getDay()].slice(1)}</h2><span>${
@@ -549,7 +553,7 @@
         [`Выберите «На экран „Домой“» ${ICON.plus}`, "Пункт может быть ниже — пролистайте список. Затем нажмите «Добавить» вверху справа."],
         ["Откройте «Расписание» со значка", "Значок появится на экране телефона. Дальше открывайте расписание только с него — так работают уведомления."],
         ["Выберите группу", "Или преподавателя. Приложение запомнит выбор, сменить можно кнопкой вверху."],
-        ["Включите уведомления", "Нажмите «🔔 Уведомления о заменах» и затем «Разрешить»."],
+        ["Включите уведомления", "Нажмите «Уведомления о заменах» и затем «Разрешить»."],
         ["Проверьте", "Внизу нажмите «Проверить» и сверните приложение — через 15 секунд придёт пробное уведомление."],
       ],
       fix: "Настройки → Уведомления → «Расписание»: включите «Допуск уведомлений», «Заблокированный экран», «Центр уведомлений» и «Баннеры». Выключите «Не беспокоить» (Фокусирование). Нужна iOS 16.4 или новее.",
@@ -561,7 +565,7 @@
         ["Установите приложение", `Нажмите «Установить» в синей плашке. Если её нет — меню ${ICON.dots} вверху справа → «Добавить на гл. экран» или «Установить приложение».`],
         ["Откройте «Расписание» со значка", "Значок появится на экране телефона, приложение откроется без адресной строки."],
         ["Выберите группу", "Или преподавателя. Приложение запомнит выбор, сменить можно кнопкой вверху."],
-        ["Включите уведомления", "Нажмите «🔔 Уведомления о заменах» и затем «Разрешить»."],
+        ["Включите уведомления", "Нажмите «Уведомления о заменах» и затем «Разрешить»."],
         ["Проверьте", "Внизу нажмите «Проверить» и сверните приложение — через 15 секунд придёт пробное уведомление."],
       ],
       fix: "Настройки → Приложения → Chrome → Уведомления — включить. Там же «Батарея» → «Без ограничений» (на Xiaomi ещё «Автозапуск»), иначе телефон усыпляет Chrome и уведомления приходят только при открытии.",
@@ -668,11 +672,11 @@
   };
   function pushFoot() {
     if (!S.who) return "";
-    if (isIos() && !standalone()) return '<p class="push-line">🔔 Уведомления о заменах на iPhone: добавьте сайт на экран «Домой» и откройте оттуда.</p>';
+    if (isIos() && !standalone()) return '<p class="push-line">Уведомления о заменах на iPhone: добавьте сайт на экран «Домой» и откройте оттуда.</p>';
     if (!Push.can()) return "";
-    if (Notification.permission === "denied") return '<p class="push-line">🔔 Уведомления о заменах запрещены в настройках браузера для этого сайта.</p>';
-    if (Push.on()) return `<p class="push-line">🔔 Уведомления о заменах включены: ${esc(S.who.v)}. <button class="link" id="push-test">Проверить</button> · <button class="link" id="push-off">Выключить</button></p>`;
-    return '<div class="foot-actions"><button class="btn blue" id="push-on">🔔 Уведомления о заменах</button></div>';
+    if (Notification.permission === "denied") return '<p class="push-line">Уведомления о заменах запрещены в настройках браузера для этого сайта.</p>';
+    if (Push.on()) return `<p class="push-line">Уведомления о заменах включены: ${esc(S.who.v)}. <button class="link" id="push-test">Проверить</button> · <button class="link" id="push-off">Выключить</button></p>`;
+    return '<div class="foot-actions"><button class="btn blue" id="push-on">Уведомления о заменах</button></div>';
   }
   function pushNote() {
     if (!S.who || !Push.can() || Push.on() || Notification.permission === "denied" || LS.get("rasp-push-hint")) return "";
@@ -795,7 +799,7 @@
   }, 60 * 1000);
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(() => {});
   window.Rasp = { load, render, picker, admin, toast, help };
-  load(true).then(() => {
+  Promise.all([load(true), window.raspSplash]).then(() => {
     const ps = Push.state();
     if (Push.on() && S.who && (Date.now() - ps.at > 3 * 86400e3 || JSON.stringify(ps.who) !== JSON.stringify(S.who))) Push.sync();
     if (location.hash === "#admin") admin();

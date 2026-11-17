@@ -216,6 +216,28 @@ details.card summary { cursor: pointer; font-weight: 600; }
 .chip:has(input:checked) { background: var(--accent); color: #fff; }
 .card.short-days { background: var(--accent-soft); }
 
+/* смена дня */
+@keyframes slideL { from { opacity: 0.2; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+@keyframes slideR { from { opacity: 0.2; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
+#list.slide-l { animation: slideL 0.28s var(--ease); }
+#list.slide-r { animation: slideR 0.28s var(--ease); }
+
+/* заставка: логотип рисуется линиями, заливается и улетает в шапку */
+.splash { position: fixed; inset: 0; z-index: 100; background: var(--bg); display: grid; place-items: center; transition: background-color 0.35s ease, opacity 0.35s ease; }
+.splash.go { background-color: transparent; pointer-events: none; }
+.splash.out { opacity: 0; }
+.splash-in { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.splash-logo { width: 132px; height: 132px; transform-origin: 0 0; }
+.splash-logo svg { width: 100%; height: 100%; overflow: visible; }
+.splash-logo path { fill: #5b7896; fill-opacity: 0; stroke: #5b7896; stroke-width: 1.4; stroke-dasharray: 1; stroke-dashoffset: 1; animation: logoDraw 1.15s cubic-bezier(0.55, 0.05, 0.45, 0.95) forwards, logoFill 0.4s ease 1s forwards; }
+@keyframes logoDraw { to { stroke-dashoffset: 0.6; } } /* каждая линия рисуется от своего начала; самая длинная — меньше 0.4 общей длины */
+@keyframes logoFill { to { fill-opacity: 1; stroke-width: 0; } }
+.splash-name { text-align: center; line-height: 1.15; opacity: 0; transform: translateY(8px); animation: splashText 0.45s var(--ease) 0.85s forwards; }
+.splash-name b { display: block; font-family: var(--fd); font-size: 1.6rem; letter-spacing: -0.02em; }
+.splash-name small { color: var(--muted); font-size: 0.95rem; }
+.splash.go .splash-name { opacity: 0 !important; transition: opacity 0.2s; animation: none; }
+@keyframes splashText { to { opacity: 1; transform: none; } }
+
 /* инструкция */
 .steps { list-style: none; margin: 6px 0 4px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .steps li { display: flex; gap: 12px; align-items: flex-start; background: var(--fill); border-radius: 14px; padding: 11px 13px; }
@@ -248,6 +270,28 @@ a.btn { text-decoration: none; }
 .chip input { width: 18px; height: 18px; accent-color: var(--accent); margin: 0; }
 .chip:has(input:checked) { background: var(--accent); color: #fff; }
 .card.short-days { background: var(--accent-soft); }
+
+/* смена дня */
+@keyframes slideL { from { opacity: 0.2; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+@keyframes slideR { from { opacity: 0.2; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
+#list.slide-l { animation: slideL 0.28s var(--ease); }
+#list.slide-r { animation: slideR 0.28s var(--ease); }
+
+/* заставка: логотип рисуется линиями, заливается и улетает в шапку */
+.splash { position: fixed; inset: 0; z-index: 100; background: var(--bg); display: grid; place-items: center; transition: background-color 0.35s ease, opacity 0.35s ease; }
+.splash.go { background-color: transparent; pointer-events: none; }
+.splash.out { opacity: 0; }
+.splash-in { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.splash-logo { width: 132px; height: 132px; transform-origin: 0 0; }
+.splash-logo svg { width: 100%; height: 100%; overflow: visible; }
+.splash-logo path { fill: #5b7896; fill-opacity: 0; stroke: #5b7896; stroke-width: 1.4; stroke-dasharray: 1; stroke-dashoffset: 1; animation: logoDraw 1.15s cubic-bezier(0.55, 0.05, 0.45, 0.95) forwards, logoFill 0.4s ease 1s forwards; }
+@keyframes logoDraw { to { stroke-dashoffset: 0.6; } } /* каждая линия рисуется от своего начала; самая длинная — меньше 0.4 общей длины */
+@keyframes logoFill { to { fill-opacity: 1; stroke-width: 0; } }
+.splash-name { text-align: center; line-height: 1.15; opacity: 0; transform: translateY(8px); animation: splashText 0.45s var(--ease) 0.85s forwards; }
+.splash-name b { display: block; font-family: var(--fd); font-size: 1.6rem; letter-spacing: -0.02em; }
+.splash-name small { color: var(--muted); font-size: 0.95rem; }
+.splash.go .splash-name { opacity: 0 !important; transition: opacity 0.2s; animation: none; }
+@keyframes splashText { to { opacity: 1; transform: none; } }
 
 /* инструкция */
 .steps { list-style: none; margin: 6px 0 4px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
