@@ -329,6 +329,20 @@ window.Admin = (() => {
       `<p>Всего разных телефонов и компьютеров: <b>${num(j.devices)}</b></p>` +
       `<h4>С чего заходят${w.u ? " (7 дней)" : ""}</h4>${bar("iPhone", pl.ios)}${bar("Android", pl.android)}${bar("Компьютер", pl.pc)}${pl.other ? bar("Другое", pl.other) : ""}` +
       `<p class="hint">Со значка на экране «Домой» (как приложение): ${pct(pl.app)}%</p>` +
+      (() => {
+        /* уведомления, которые не включились (7 дней) */
+        let n = 0;
+        const by = {};
+        for (let i = 0; i < 7; i++) {
+          const d = byDay[shift(i)];
+          if (!d || !d.pe) continue;
+          n += d.pe;
+          for (const [k, v] of Object.entries(d.peb || {})) by[k] = (by[k] || 0) + v;
+        }
+        if (!n) return "";
+        const top = Object.entries(by).sort((a, b) => b[1] - a[1]).slice(0, 6);
+        return `<h4>Не включились уведомления (7 дней): ${n}</h4><ul class="pe-list">${top.map(([k, v]) => `<li>${U.esc(k)} — ${v}</li>`).join("")}</ul>`;
+      })() +
       `<table class="vtab"><tr><th>День</th><th>Заходов</th><th>Чел.</th><th>iPhone</th><th>Android</th><th>ПК</th></tr>${Array.from({ length: 14 }, (_, i) => shift(i))
         .filter((d) => d >= first)
         .map((d) => {

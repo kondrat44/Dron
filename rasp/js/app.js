@@ -682,7 +682,35 @@
     },
     async sub() {
       const reg = await Promise.race([navigator.serviceWorker.ready, new Promise((_, bad) => setTimeout(() => bad(Error("приложение ещё загружается, попробуйте через минуту")), 10000))]);
-      return (await reg.pushManager.getSubscription()) || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: Push.key() }));
+      const old = await reg.pushManager.getSubscription();
+      if (old) return old;
+      const opt = { userVisibleOnly: true, applicationServerKey: Push.key() };
+      try {
+        return await reg.pushManager.subscribe(opt);
+      } catch (e) {
+        /* «Registration failed - push service error»: служба уведомлений браузера (у Android — Google) не ответила; бывает разово — пробуем ещё раз */
+        if (e && e.name === "NotAllowedError") throw e;
+        await new Promise((ok) => setTimeout(ok, 1500));
+        const again = await reg.pushManager.getSubscription();
+        if (again) await again.unsubscribe().catch(() => {});
+        return await reg.pushManager.subscribe(opt);
+      }
+    },
+    /* понятное объяснение, почему не включились, по телефону и браузеру */
+    why(e) {
+      const ua = navigator.userAgent, m = String((e && e.message) || e || "");
+      const br = Push.browser();
+      if (/push service|Registration failed|AbortError/i.test(m + " " + (e && e.name))) {
+        if (/huawei|honor|hmscore/i.test(ua) && br !== "Chrome") return "На телефонах Huawei и Honor без сервисов Google уведомления от сайтов не работают. Расписание при этом работает — просто заходите проверять.";
+        if (br !== "Chrome" && /android/i.test(ua)) return `В браузере «${br}» уведомления от сайтов не работают. Откройте этот сайт в Google Chrome и включите уведомления там.`;
+        if (/android/i.test(ua)) return "Chrome не смог подключиться к службе уведомлений Google. Проверьте интернет (и выключите VPN, если он есть), что на телефоне работают сервисы Google Play, и попробуйте ещё раз через минуту.";
+        return "Браузер не смог подключиться к своей службе уведомлений. Попробуйте ещё раз через минуту или откройте сайт в другом браузере.";
+      }
+      return m;
+    },
+    browser() {
+      const ua = navigator.userAgent;
+      return /YaBrowser|YaApp/i.test(ua) ? "Яндекс Браузер" : /SamsungBrowser/i.test(ua) ? "Samsung Internet" : /HuaweiBrowser/i.test(ua) ? "Huawei Browser" : /MiuiBrowser|XiaoMi/i.test(ua) ? "браузер Xiaomi" : /OPR\/|Opera/i.test(ua) ? "Opera" : /EdgA|Edg\//i.test(ua) ? "Edge" : /Firefox|FxiOS/i.test(ua) ? "Firefox" : /CriOS|Chrome/i.test(ua) ? "Chrome" : /Safari/i.test(ua) ? "Safari" : "другой браузер";
     },
     async enable() {
       try {
@@ -694,9 +722,13 @@
         const sub = await Push.sub();
         await Push.send("/sub", { sub: sub.toJSON(), who: S.who });
         LS.set("rasp-push", JSON.stringify({ who: S.who, at: Date.now() }));
+        LS.set("rasp-push-fail", null);
         toast("Уведомления включены: " + S.who.v);
       } catch (e) {
-        toast("Не получилось включить уведомления: " + (e.message || e));
+        const msg = Push.why(e);
+        LS.set("rasp-push-fail", JSON.stringify({ msg, at: Date.now() }));
+        toast("Уведомления не включились — почему, написано внизу страницы");
+        hit("pusherr", Push.browser() + (/huawei|honor/i.test(navigator.userAgent) ? " · Huawei/Honor" : "") + " · " + String((e && e.message) || e).slice(0, 60));
       }
       render();
     },
@@ -727,11 +759,13 @@
     if (isIos() && !standalone()) return '<p class="push-line">Уведомления о заменах на iPhone: добавьте сайт на экран «Домой» и откройте оттуда.</p>';
     if (!Push.can()) return "";
     if (Notification.permission === "denied") return '<p class="push-line">Уведомления о заменах запрещены в настройках браузера для этого сайта.</p>';
+    const fail = !Push.on() && LS.json("rasp-push-fail", null);
+    if (fail) return `<p class="push-line push-fail">Уведомления о заменах не включились. ${esc(fail.msg)} <button class="link" id="push-on">Попробовать ещё раз</button></p>`;
     if (Push.on()) return `<p class="push-line">Уведомления о заменах включены: ${esc(S.who.v)}. <button class="link" id="push-test">Проверить</button> · <button class="link" id="push-off">Выключить</button></p>`;
     return '<div class="foot-actions"><button class="btn blue" id="push-on">Уведомления о заменах</button></div>';
   }
   function pushNote() {
-    if (!S.who || !Push.can() || Push.on() || Notification.permission === "denied" || LS.get("rasp-push-hint")) return "";
+    if (!S.who || !Push.can() || Push.on() || Notification.permission === "denied" || LS.get("rasp-push-hint") || LS.get("rasp-push-fail")) return "";
     if (isIos() && !standalone()) return "";
     return `<div class="note install push-note"><p><b>Уведомления о заменах</b> — телефон сообщит, если у ${S.who.type === "g" ? "группы " : ""}${esc(S.who.v)} поменяются пары.</p><button class="btn blue" id="push-on2">Включить</button><button class="x-btn" id="push-x" aria-label="Скрыть">×</button></div>`;
   }
@@ -861,14 +895,14 @@
   }, 60 * 1000);
   /* посещаемость: «зашёл на сайт» (без имени и группы — только случайный номер устройства, платформа и «со значка») */
   let hitAt = 0;
-  function hit() {
-    if (!C.push || Date.now() - hitAt < 30 * 60e3 || (/^(localhost|127\.)/.test(location.hostname) && !window.__HIT)) return;
-    hitAt = Date.now();
+  function hit(ev, info) {
+    if (!C.push || (!ev && Date.now() - hitAt < 30 * 60e3) || (/^(localhost|127\.)/.test(location.hostname) && !window.__HIT)) return;
+    if (!ev) hitAt = Date.now();
     let id = LS.get("rasp-vid");
     if (!id) LS.set("rasp-vid", (id = Math.random().toString(36).slice(2, 12) + Date.now().toString(36).slice(-4)));
     const ua = navigator.userAgent;
     const p = /android/i.test(ua) ? "android" : isIos() ? "ios" : /windows|macintosh|linux|cros/i.test(ua) ? "pc" : "other";
-    const body = JSON.stringify({ id, p, app: standalone() });
+    const body = JSON.stringify(ev ? { id, p, app: standalone(), ev, info } : { id, p, app: standalone() });
     try {
       if (!(navigator.sendBeacon && navigator.sendBeacon(C.push + "/hit", body))) fetch(C.push + "/hit", { method: "POST", body, keepalive: true, mode: "no-cors" }).catch(() => {});
     } catch {}
