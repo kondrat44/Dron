@@ -74,16 +74,28 @@ window.Admin = (() => {
 
   /* ---------- проверки файла ---------- */
   /* mode: "new" — расписание на неделю, которой ещё нет на сайте (видно сразу);
-     "edit" — исправленный файл уже опубликованной недели (видно сразу, уведомление вечером в C.notifyHour:00);
+     "edit" — исправленный файл уже опубликованной недели: студенты увидят вечером в C.notifyHour:00 (до этого — серым «не видно студентам»);
+       в notifyHour:00 вступает в силу само, у студентов на телефонах — компьютер учебной части для этого не нужен; если позже — сразу;
      "urgent" — срочные изменения уже опубликованной недели (видно сразу) */
   const MODE = { new: "Новое расписание", edit: "Изменить расписание", urgent: "Срочные изменения расписания" };
   const isChange = (m) => m === "edit" || m === "urgent";
-  /* плановые изменения видны сразу, уведомление — вечером в C.notifyHour:00 (если позже — сразу) */
+  /* плановые изменения вступают в силу вечером в C.notifyHour:00 по Кемерово (если позже — сразу) */
   const NH = C.notifyHour || 18;
   const AT = "в " + NH + ":00";
+  const TZ = 7; // Кемерово
+  const kemDay = (n) => new Date(n.getTime() + TZ * 3600e3).toISOString().slice(0, 10);
+  const beforeEvening = (n) => new Date(n.getTime() + TZ * 3600e3).getUTCHours() < NH;
   /* когда студенты увидят публикацию */
   function visibleFrom(mode, n) {
-    return new Date(n); // все публикации студенты видят сразу; плановым только уведомление приходит вечером
+    if (mode === "edit" && beforeEvening(n)) return new Date(`${kemDay(n)}T${String(NH).padStart(2, "0")}:00:00+07:00`);
+    return new Date(n);
+  }
+  /* издания недели: что видят студенты сейчас (visible) и что ждёт вечера (pending) */
+  function weekState(file, week, nowIso) {
+    const list = ((file && file.editions) || []).filter((e) => e.week === week).sort((a, b) => a.publishedAt.localeCompare(b.publishedAt));
+    const vis = list.filter((e) => e.visibleFrom <= nowIso);
+    const pend = list.filter((e) => e.visibleFrom > nowIso);
+    return { visible: vis[vis.length - 1] || null, pending: pend[pend.length - 1] || null, pendAll: pend };
   }
   function inspect(data, file, mode, short) {
     const lessons = data.lessons;
@@ -109,12 +121,20 @@ window.Admin = (() => {
     const listG = (a) => (a.length > 12 ? sortG(a).slice(0, 12).join(", ") + ` и ещё ${a.length - 12}` : sortG(a).join(", "));
     /* файл одного отделения: группы, которых в файле нет, остаются как были в опубликованной неделе */
     const fileGroups = new Set(groups);
-    const keep = same ? Pack.unpack(same).filter((l) => l.groups.every((g) => !fileGroups.has(g))) : [];
+    /* что видят студенты и что ждёт вечера: «Изменить» строится на последнем загруженном (в т.ч. ждущем),
+       сразу видимое (срочное, другое отделение) — на том, что студенты видят сейчас, а ждущее вечера пересобирается с этим файлом */
+    const ws = weekState(file, week, U.now().toISOString());
+    const keepOf = (ed) => (ed ? Pack.unpack(ed).filter((l) => l.groups.every((g) => !fileGroups.has(g))) : []);
+    const withKeep = (ed) => {
+      const k = keepOf(ed);
+      return k.length ? { ...data, lessons: data.lessons.concat(k.map((l) => ({ date: l.date, period: l.period, groups: l.groups, subgroup: l.sub, subject: l.subject, teacher: l.teacher, room: l.room, start: l.start, end: l.end }))) } : data;
+    };
+    const base = mode === "edit" ? same : ws.visible || same;
+    const keep = keepOf(same);
     const kept = [...new Set(keep.flatMap((l) => l.groups))];
     const overlap = same ? same.T.g.filter((g) => fileGroups.has(g)) : [];
-    const merged = keep.length
-      ? { ...data, lessons: data.lessons.concat(keep.map((l) => ({ date: l.date, period: l.period, groups: l.groups, subgroup: l.sub, subject: l.subject, teacher: l.teacher, room: l.room, start: l.start, end: l.end }))) }
-      : data;
+    const merged = withKeep(base);
+    const pendingMerged = mode !== "edit" && ws.pending ? withKeep(ws.pending) : null;
     if (last && !same) {
       const was = new Set(last.T.g);
       const gone = [...was].filter((g) => !groups.includes(g));
@@ -143,10 +163,13 @@ window.Admin = (() => {
     const shortRemoved = same ? Pack.shortAdded(sh, same) : [];
     if (!stop.length && same) {
       const n = U.now().toISOString();
-      diff = Pack.diff(Pack.unpack(same), Pack.unpack(Pack.edition(merged, { id: "draft", publishedAt: n, visibleFrom: n, short: sh.short })));
-      if (isChange(mode) && !diff.length && Pack.shortSame(same, sh)) stop.push("Этот файл ничем не отличается от последнего загруженного расписания недели " + wk + ". Публиковать нечего. Если нужно только отметить сокращённый день — поставьте галочку ниже.");
+      const mine = Pack.unpack(Pack.edition(merged, { id: "draft", publishedAt: n, visibleFrom: n, short: sh.short }));
+      const vsLast = Pack.diff(Pack.unpack(same), mine);
+      /* показываем, что изменится у студентов (по сравнению с тем, что они видят сейчас) */
+      diff = ws.visible && ws.visible !== same ? Pack.diff(Pack.unpack(ws.visible), mine) : vsLast;
+      if (isChange(mode) && !vsLast.length && Pack.shortSame(same, sh)) stop.push("Этот файл ничем не отличается от последнего загруженного расписания недели " + wk + ". Публиковать нечего. Если нужно только отметить сокращённый день — поставьте галочку ниже.");
     }
-    return { groups, dates, week, stop, warn, same, switchTo, diff, short: sh.short, shortAdded, shortRemoved, merged, kept, adding };
+    return { groups, dates, week, stop, warn, same, switchTo, diff, short: sh.short, shortAdded, shortRemoved, merged, kept, adding, pending: ws.pending, pendingMerged };
   }
 
   /* ---------- экран ---------- */
@@ -189,13 +212,21 @@ window.Admin = (() => {
       note = { cls: "bad", text: e.message + ". Проверьте интернет." };
     }
     const nowIso = U.now().toISOString();
-    const eds = published ? published.file.editions.slice().sort((a, b) => b.publishedAt.localeCompare(a.publishedAt)) : [];
+    /* в списке по каждой неделе: что видят студенты сейчас и серым — что ждёт вечера; заменённые старые не показываем */
+    const all = published ? published.file.editions : [];
+    const eds = [...new Set(all.map((e) => e.week))]
+      .sort()
+      .reverse()
+      .flatMap((w) => {
+        const st = weekState(published.file, w, nowIso);
+        return [...st.pendAll.slice().reverse(), st.visible].filter(Boolean);
+      });
     U.openSheet(
       head("Учебная часть") +
         (note ? `<div class="card ${note.cls}"><p>${note.text}</p></div>` : "") +
         `<p>Сохраните Excel недели в программе учебной части, как обычно, и выберите, что делаете.</p><input type="file" id="adm-file" accept=".xlsx" hidden><div class="modes"><button class="mode blue" id="adm-new" ${published ? "" : "disabled"}><b>Новое расписание</b><small>На новую неделю. Студенты увидят сразу</small></button><button class="mode" id="adm-edit" ${
           published && eds.length ? "" : "disabled"
-        }><b>Изменить расписание</b><small>Исправленный файл этой недели. Видно сразу, уведомление вечером ${AT}</small></button><button class="mode urgent" id="adm-urgent" ${
+        }><b>Изменить расписание</b><small>Исправленный файл этой недели. Студенты увидят вечером ${AT}, тогда же уведомление</small></button><button class="mode urgent" id="adm-urgent" ${
           published && eds.length ? "" : "disabled"
         }><b>Срочные изменения расписания</b><small>Исправленный файл этой недели. Студенты увидят сразу</small></button></div><div id="adm-draft"></div>` +
         `<details class="card" ${eds.length ? "open" : ""}><summary>Опубликовано сейчас: ${eds.length}</summary>${
@@ -203,9 +234,11 @@ window.Admin = (() => {
             ? eds
                 .map(
                   (e) =>
-                    `<div class="ed"><div><b>${U.esc(edLabel(e))}</b><small>${U.esc(e.source || "")}</small><small>${
-                      e.visibleFrom > nowIso ? "Студенты увидят " + U.esc(U.whenText(e.visibleFrom)) : "Видно студентам с " + U.esc(U.whenText(e.visibleFrom))
-                    }</small></div><button class="btn danger" data-del="${U.esc(e.id)}">Убрать</button></div>`,
+                    e.visibleFrom > nowIso
+                      ? `<div class="ed pending"><div><b>${U.esc(edLabel(e))}</b><span class="ed-tag">Сейчас не видно студентам</span><small>${U.esc(e.source || "")}</small><small>Вступит в силу ${
+                          kemDay(new Date(e.visibleFrom)) === kemDay(U.now()) ? "сегодня " + AT : U.esc(U.whenText(e.visibleFrom))
+                        }, тогда же уведомление. Загружено ${U.esc(U.whenText(e.publishedAt))}</small></div><button class="btn danger" data-del="${U.esc(e.id)}">Убрать</button></div>`
+                      : `<div class="ed"><div><b>${U.esc(edLabel(e))}</b><span class="ed-tag live">Сейчас у студентов</span><small>${U.esc(e.source || "")}</small><small>Видно студентам с ${U.esc(U.whenText(e.visibleFrom))}</small></div><button class="btn danger" data-del="${U.esc(e.id)}">Убрать</button></div>`,
                 )
                 .join("")
             : "<p>Пока ничего не опубликовано.</p>"
@@ -335,6 +368,7 @@ window.Admin = (() => {
       .map((b, i) => `${i + 1} пара ${b[0]}–${b[1]}`)
       .join(" · ")}</p></div>`;
   }
+  const pendNote = (info) => (info.pending ? ` Изменения других групп, которые ждут ${NH}:00, сохранятся и вступят в силу ${AT}.` : "");
   function showDraft() {
     const box = U.$("adm-draft");
     if (!box || !draft) return;
@@ -384,12 +418,14 @@ window.Admin = (() => {
         ? ""
         : `<div class="card when"><p id="adm-when">${
             mode === "edit"
-              ? n.getHours() < NH
-                ? `Студенты увидят <b>сразу</b>, через 1–2 минуты, без уведомления. Уведомление тем, у кого поменялись пары, придёт <b>сегодня ${AT}</b>. Если нужно уведомить сразу — нажмите «Срочные изменения расписания».`
+              ? beforeEvening(n)
+                ? `До ${NH}:00 студенты видят прежнее расписание, а это будет в списке <b>серым — «Сейчас не видно студентам»</b>. <b>Сегодня ${AT}</b> оно вступит в силу само (компьютер можно выключить): студенты увидят изменения, тем, у кого поменялись пары, придёт уведомление, прежнее уберётся из списка. Если нужно показать сразу — нажмите «Срочные изменения расписания».${
+                    info.pending ? ` Это заменит изменения, загруженные ${U.esc(U.whenText(info.pending.publishedAt))}, которые ещё ждали ${NH}:00.` : ""
+                  }`
                 : `Студенты увидят <b>сразу</b>, через 1–2 минуты. Уже позже ${NH}:00 — уведомление тем, у кого поменялись пары, придёт сразу.`
               : mode === "urgent"
-                ? "Студенты увидят <b>сразу</b>, через 1–2 минуты. Тем, у кого поменялись пары, сразу придёт уведомление «Срочные изменения»."
-                : "Студенты увидят <b>сразу</b>, через 1–2 минуты. Всем подписанным придёт уведомление «Новое расписание»."
+                ? "Студенты увидят <b>сразу</b>, через 1–2 минуты. Тем, у кого поменялись пары, сразу придёт уведомление «Срочные изменения»." + pendNote(info)
+                : "Студенты увидят <b>сразу</b>, через 1–2 минуты. Всем подписанным придёт уведомление «Новое расписание»." + pendNote(info)
           }</p></div>${
             info.warn.length ? '<div class="choice"><label><input type="checkbox" id="adm-sure"> <span>Я проверил замечания, файл правильный</span></label></div>' : ""
           }<div class="actions"><button class="btn blue" id="adm-publish" ${info.warn.length ? "disabled" : ""}>${mode === "urgent" ? "Опубликовать срочно" : isChange(mode) ? "Опубликовать изменения" : "Опубликовать"}</button><button class="btn" id="adm-cancel">Отмена</button></div>`);
@@ -428,12 +464,23 @@ window.Admin = (() => {
     const n = U.now();
     const from = visibleFrom(draft.mode, n);
     const ed = Pack.edition(draft.info.merged || draft.data, { id: n.getTime().toString(36), publishedAt: n.toISOString(), visibleFrom: from.toISOString(), kind: draft.mode, short: draft.short });
+    /* ждущее вечера той же недели заменяется: при «Изменить» — новым файлом, при сразу видимом — пересобранным с этим файлом */
+    const pend = draft.info.pending && draft.info.pendingMerged;
+    const ed2 = pend
+      ? Pack.edition(draft.info.pendingMerged, { id: n.getTime().toString(36) + "p", publishedAt: new Date(n.getTime() + 1).toISOString(), visibleFrom: draft.info.pending.visibleFrom, kind: draft.info.pending.kind, short: draft.short })
+      : null;
+    const put = (file) => {
+      const nowIso = n.toISOString();
+      let f = { v: 1, editions: file.editions.filter((e) => !(e.week === ed.week && e.visibleFrom > nowIso)) };
+      f = Pack.merge(f, ed, n.toLocaleDateString("sv"));
+      return ed2 ? Pack.merge(f, ed2, n.toLocaleDateString("sv")) : f;
+    };
     const label = edLabel(ed);
     try {
       for (let attempt = 0; ; attempt++) {
         const cur = await readPublished();
         try {
-          await writePublished(Pack.merge(cur.file, ed, n.toLocaleDateString("sv")), cur.sha, `Расписание: ${MODE[draft.mode].toLowerCase()}, ${label.toLowerCase()} (${draft.name})`);
+          await writePublished(put(cur.file), cur.sha, `Расписание: ${MODE[draft.mode].toLowerCase()}, ${label.toLowerCase()} (${draft.name})`);
           break;
         } catch (e) {
           if (e.code !== 409 || attempt >= 2) throw e;
@@ -447,12 +494,14 @@ window.Admin = (() => {
         cls: "ok",
         text:
           `<b>Опубликовано: ${U.esc(label)}${m === "urgent" ? " (срочные изменения)" : m === "edit" ? " (изменение)" : ""}.</b> ` +
-          "У студентов появится через 1–2 минуты." +
+          (from > n ? `Сейчас не видно студентам — вступит в силу сегодня ${AT} само, компьютер можно выключить.` : "У студентов появится через 1–2 минуты.") +
           (sd.length ? ` Сокращённые дни (пары по 1 часу): ${U.esc(sd.join(", "))}.` : "") +
           (m === "urgent"
             ? " Тем, у кого поменялись пары, сразу придёт уведомление, в приложении будет плашка «Изменения в расписании»."
             : m === "edit"
-              ? ` В приложении будет плашка «Изменения в расписании». Уведомление тем, у кого поменялись пары, придёт ${n.getHours() < NH ? "сегодня " + AT : "сразу"}.`
+              ? from > n
+                ? ` ${AT} у студентов появится плашка «Изменения в расписании», тем, у кого поменялись пары, придёт уведомление, а прежнее уберётся из списка.`
+                : " В приложении будет плашка «Изменения в расписании». Уведомление тем, у кого поменялись пары, придёт сразу."
               : " Подписанным придёт уведомление о новом расписании."),
       });
     } catch (e) {

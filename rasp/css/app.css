@@ -207,6 +207,10 @@ details.card summary { cursor: pointer; font-weight: 600; }
 .ed { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 0.9rem; }
 .ed:first-of-type { border-top: 0; }
 .ed small { color: var(--muted); display: block; }
+.ed.pending > div { opacity: 0.6; }
+.ed.pending b { color: var(--muted); }
+.ed-tag { display: inline-block; margin: 0 0 0 6px; padding: 1px 8px; border-radius: 99px; background: var(--card); border: 1px solid var(--line); color: var(--muted); font-size: 0.75rem; font-weight: 600; vertical-align: 1px; }
+.ed-tag.live { background: var(--green-soft); border-color: transparent; color: var(--green); }
 
 /* сокращённые (предпраздничные) дни */
 .note.short-day { background: var(--accent-soft); color: var(--ink); }
