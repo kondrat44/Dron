@@ -199,7 +199,7 @@
     const meta = [];
     if (w.type !== "g") meta.push(l.groups.join(", "));
     if (w.type !== "t" && l.teacher) meta.push(l.teacher);
-    if (w.type !== "r") meta.push(where(l));
+    const roomHtml = l.room && C.buildings && C.buildings[l.bld] ? `<button class="room-link" data-room="${esc(l.room)}" data-bld="${esc(l.bld)}">${esc(where(l))}</button>` : null;
     const gone = mark && mark.type === "removed";
     const tags = [];
     if (l.sub) tags.push(`<span class="tag sg">${l.sub} подгруппа</span>`);
@@ -207,10 +207,61 @@
     if (gone) tags.push('<span class="tag off">Пара снята</span>');
     else if (mark && mark.type === "new") tags.push('<span class="tag new">Новая пара</span>');
     else if (mark && mark.type === "changed") tags.push('<span class="tag ch">Изменено</span>');
-    return `<div class="les${gone ? " gone" : ""}" style="--h:${HUE[l.bld] ?? 265}"><h3>${esc(l.subject)}</h3><p>${esc(meta.join(" · "))}</p>${
+    return `<div class="les${gone ? " gone" : ""}" style="--h:${HUE[l.bld] ?? 265}"><h3>${esc(l.subject)}</h3><p>${meta.map(esc).concat(w.type !== "r" ? [roomHtml || esc(where(l))] : []).join(" · ")}</p>${
       mark && mark.type === "changed" ? `<p class="was">Было: ${esc(brief(mark.old))}</p>` : ""
     }<div class="tags">${tags.join("")}</div></div>`;
   }
+  /* «Сейчас и дальше»: что идёт сегодня и что следующее; обновляется раз в минуту вместе с экраном */
+  function nowBar() {
+    if (!S.who) return "";
+    const today = iso(now());
+    const w = S.weeks.find((x) => x.dates.includes(today));
+    if (!w) return "";
+    const t = hm(now());
+    const by = new Map();
+    for (const l of mine(lessonsOf(w.cur)).filter((l) => l.date === today && l.start && l.end).sort((a, b) => a.start.localeCompare(b.start))) {
+      const k = l.start + "|" + l.end;
+      if (!by.has(k)) by.set(k, []);
+      by.get(k).push(l);
+    }
+    const slots = [...by.values()];
+    const cur = slots.find((x) => x[0].start <= t && t < x[0].end);
+    const next = slots.find((x) => x[0].start > t);
+    if (!cur && !next) return "";
+    const min = (a, b) => { const [h1, m1] = a.split(":").map(Number), [h2, m2] = b.split(":").map(Number); return h2 * 60 + m2 - (h1 * 60 + m1); };
+    const left = (n) => (n >= 60 ? `${Math.floor(n / 60)} ч ${n % 60} мин` : `${n} мин`);
+    const subj = (x) => esc(x.map((l) => l.subject).filter((v, i, a) => a.indexOf(v) === i).join(" / "));
+    const rooms = (x) => esc(x.map((l) => l.room).filter((v, i, a) => v && a.indexOf(v) === i).map((r) => "ауд. " + r).join(", ") || "кабинет не указан");
+    const name = (x) => (x[0].period ? x[0].period + " пара" : "до первой пары");
+    let L;
+    if (cur) {
+      const total = min(cur[0].start, cur[0].end), done = min(cur[0].start, t);
+      L = `<div class="nb-left"><div class="nb-lbl">Сейчас · ${name(cur)}</div><div class="nb-t">${subj(cur)}</div><div class="nb-m">${rooms(cur)} · до конца ${left(min(t, cur[0].end))}</div></div>`;
+      L += `<div class="nb-bar"><i style="width:${Math.max(2, Math.min(100, Math.round((100 * done) / total)))}%"></i></div>`;
+    } else {
+      const first = slots.indexOf(next) === 0;
+      L = `<div class="nb-left"><div class="nb-lbl">${first ? "Сегодня · первая пара" : "Перерыв"}</div><div class="nb-t">${subj(next)}</div><div class="nb-m">${rooms(next)} · через ${left(min(t, next[0].start))}</div></div>`;
+    }
+    const R = next ? `<div class="nb-right"><div class="nb-lbl nb-next">${cur ? "Дальше" : "Начало"}</div><div class="nb-t">${esc(next[0].start)}</div><div class="nb-m">${name(next)} · ${rooms(next)}</div></div>` : `<div class="nb-right"><div class="nb-lbl nb-next">Дальше</div><div class="nb-t">—</div><div class="nb-m">последняя пара</div></div>`;
+    return `<section class="nowbar${cur ? "" : " idle"}" aria-label="Сейчас и дальше">${L.replace('<div class="nb-bar">', R + '<div class="nb-bar">')}${cur ? "" : R}</section>`;
+  }
+  /* «Где аудитория»: корпус, адрес и маршрут */
+  function roomSheet(room, bld) {
+    const bs = C.buildings || {};
+    const b = bs[bld];
+    if (!b) return;
+    const q = encodeURIComponent(`${C.city || ""}, ${b.addr}`);
+    openSheet(
+      `<div class="sheet-head"><h2>Где аудитория</h2><button class="x-btn" id="sheet-x" aria-label="Закрыть">×</button></div><div class="rs-big">ауд. ${esc(room)}</div><p class="rs-addr">${esc(b.name)} · ${esc(b.addr)}</p><div class="rs-blds">${Object.entries(bs)
+        .map(([k, x]) => `<div class="rs-b${k === String(bld) ? " on" : ""}"><b>${esc(x.name.replace("Корпус № ", "Корпус "))}</b>${esc(x.addr.replace("ул. ", ""))}<small>ауд. ${esc(k)}…</small></div>`)
+        .join("")}</div><div class="actions"><a class="btn blue" href="https://yandex.ru/maps/?text=${q}" target="_blank" rel="noopener">Маршрут в Яндекс Картах</a><a class="btn" href="https://2gis.ru/search/${q}" target="_blank" rel="noopener">2ГИС</a></div><p class="hint">Корпус определяется по первой цифре номера аудитории.</p>`,
+    );
+    $("sheet-x").onclick = closeSheet;
+  }
+  $("app").addEventListener("click", (e) => {
+    const b = e.target.closest(".room-link");
+    if (b) roomSheet(b.dataset.room, b.dataset.bld);
+  });
   function dayHtml(date, w, ch) {
     const all = lessonsOf(w.cur);
     const ls = mine(all).filter((l) => l.date === date);
@@ -328,6 +379,7 @@
               S.who.type === "g" ? "У группы " + esc(S.who.v) : "У преподавателя " + esc(S.who.v)
             } на этой неделе ничего не поменялось.</p><div class="row-actions"><button class="btn" id="seen">Понятно</button></div></section>`
           : "") +
+      nowBar() +
       `<div class="weekbar"><div class="weeknav">${
         S.weeks.length > 1 ? `<button class="nav-btn" id="wk-prev" aria-label="Прошлая неделя" ${S.wi === 0 ? "disabled" : ""}>‹</button>` : ""
       }<b>${esc(weekLabel(w))}</b>${

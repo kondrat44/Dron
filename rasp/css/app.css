@@ -216,6 +216,28 @@ details.card summary { cursor: pointer; font-weight: 600; }
 .chip:has(input:checked) { background: var(--accent); color: #fff; }
 .card.short-days { background: var(--accent-soft); }
 
+/* «Сейчас и дальше» */
+.nowbar { background: var(--card); border-radius: 18px; box-shadow: var(--sh); padding: 12px 14px 10px; margin: 2px 0 12px; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; }
+.nowbar.idle { padding-bottom: 12px; }
+.nb-left { min-width: 0; }
+.nb-lbl { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); }
+.nb-lbl.nb-next { color: var(--muted); }
+.nb-t { font-weight: 600; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nb-m { font-size: 0.86rem; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nb-right { text-align: right; border-left: 1px solid var(--line); padding-left: 12px; min-width: 92px; max-width: 42vw; }
+.nb-bar { grid-column: 1 / -1; height: 4px; border-radius: 4px; background: var(--fill); overflow: hidden; margin-top: 6px; }
+.nb-bar i { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+/* аудитория — нажимается, открывает «Где аудитория» */
+.room-link { border: 0; background: none; padding: 0; font: inherit; color: inherit; text-decoration: underline; text-decoration-style: dotted; text-decoration-color: var(--muted); text-underline-offset: 3px; cursor: pointer; }
+.rs-big { font-family: var(--fd); font-size: 1.6rem; font-weight: 700; letter-spacing: -0.02em; }
+.rs-addr { color: var(--ink2); margin: 2px 0 0; }
+.rs-blds { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0 6px; }
+.rs-b { background: var(--fill); border-radius: 14px; padding: 10px; font-size: 0.82rem; color: var(--ink2); min-height: 74px; }
+.rs-b b { display: block; font-size: 0.95rem; color: var(--ink); }
+.rs-b small { display: block; margin-top: 4px; color: var(--muted); }
+.rs-b.on { background: var(--accent); color: #fff; }
+.rs-b.on b, .rs-b.on small { color: #fff; }
+
 /* смена дня */
 @keyframes slideL { from { opacity: 0.2; transform: translateX(28px); } to { opacity: 1; transform: none; } }
 @keyframes slideR { from { opacity: 0.2; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
@@ -270,6 +292,28 @@ a.btn { text-decoration: none; }
 .chip input { width: 18px; height: 18px; accent-color: var(--accent); margin: 0; }
 .chip:has(input:checked) { background: var(--accent); color: #fff; }
 .card.short-days { background: var(--accent-soft); }
+
+/* «Сейчас и дальше» */
+.nowbar { background: var(--card); border-radius: 18px; box-shadow: var(--sh); padding: 12px 14px 10px; margin: 2px 0 12px; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; }
+.nowbar.idle { padding-bottom: 12px; }
+.nb-left { min-width: 0; }
+.nb-lbl { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); }
+.nb-lbl.nb-next { color: var(--muted); }
+.nb-t { font-weight: 600; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nb-m { font-size: 0.86rem; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nb-right { text-align: right; border-left: 1px solid var(--line); padding-left: 12px; min-width: 92px; max-width: 42vw; }
+.nb-bar { grid-column: 1 / -1; height: 4px; border-radius: 4px; background: var(--fill); overflow: hidden; margin-top: 6px; }
+.nb-bar i { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+/* аудитория — нажимается, открывает «Где аудитория» */
+.room-link { border: 0; background: none; padding: 0; font: inherit; color: inherit; text-decoration: underline; text-decoration-style: dotted; text-decoration-color: var(--muted); text-underline-offset: 3px; cursor: pointer; }
+.rs-big { font-family: var(--fd); font-size: 1.6rem; font-weight: 700; letter-spacing: -0.02em; }
+.rs-addr { color: var(--ink2); margin: 2px 0 0; }
+.rs-blds { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0 6px; }
+.rs-b { background: var(--fill); border-radius: 14px; padding: 10px; font-size: 0.82rem; color: var(--ink2); min-height: 74px; }
+.rs-b b { display: block; font-size: 0.95rem; color: var(--ink); }
+.rs-b small { display: block; margin-top: 4px; color: var(--muted); }
+.rs-b.on { background: var(--accent); color: #fff; }
+.rs-b.on b, .rs-b.on small { color: #fff; }
 
 /* смена дня */
 @keyframes slideL { from { opacity: 0.2; transform: translateX(28px); } to { opacity: 1; transform: none; } }
