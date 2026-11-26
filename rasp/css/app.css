@@ -377,3 +377,6 @@ a.btn { text-decoration: none; }
   body { background: #fff; }
   .row { box-shadow: none; border: 1px solid #ccc; break-inside: avoid; }
 }
+.when-at { display: flex; gap: 8px; margin: 4px 0 8px; }
+.when-at[hidden] { display: none; }
+.when-at .inp { flex: 1; min-width: 0; }

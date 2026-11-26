@@ -86,7 +86,23 @@ window.Admin = (() => {
   const kemDay = (n) => new Date(n.getTime() + TZ * 3600e3).toISOString().slice(0, 10);
   const beforeEvening = (n) => new Date(n.getTime() + TZ * 3600e3).getUTCHours() < NH;
   /* когда студенты увидят публикацию */
-  function visibleFrom(mode, n) {
+  const hh = (h) => String(h).padStart(2, "0") + ":00";
+  const kemAt = (day, hm) => new Date(`${day}T${hm}:00+07:00`);
+  const kemHM = (d) => new Date(d.getTime() + TZ * 3600e3).toISOString().slice(11, 16);
+  const addD = (day, k) => {
+    const d = new Date(day + "T12:00:00Z");
+    d.setUTCDate(d.getUTCDate() + k);
+    return d.toISOString().slice(0, 10);
+  };
+  /* неделя, которую студенты ещё не видят: время публикации выбирает учебная часть.
+     По умолчанию — то, что уже назначено, иначе суббота перед неделей в C.notifyHour:00 (если ещё не прошла), иначе сразу */
+  function defaultWhen(info, n) {
+    if (info.pending) return info.pending.visibleFrom;
+    const sat = kemAt(addD(info.week, -2), hh(NH));
+    return sat > n ? sat.toISOString() : null;
+  }
+  function visibleFrom(mode, n, d) {
+    if (d && d.info.sched) return d.when && new Date(d.when) > n ? new Date(d.when) : new Date(n);
     if (mode === "edit" && beforeEvening(n)) return new Date(`${kemDay(n)}T${String(NH).padStart(2, "0")}:00:00+07:00`);
     return new Date(n);
   }
@@ -134,7 +150,8 @@ window.Admin = (() => {
     const kept = [...new Set(keep.flatMap((l) => l.groups))];
     const overlap = same ? same.T.g.filter((g) => fileGroups.has(g)) : [];
     const merged = withKeep(base);
-    const pendingMerged = mode !== "edit" && ws.pending ? withKeep(ws.pending) : null;
+    /* неделя ещё не видна студентам: новый файл просто заменяет загруженный раньше */
+    const pendingMerged = mode !== "edit" && ws.visible && ws.pending ? withKeep(ws.pending) : null;
     if (last && !same) {
       const was = new Set(last.T.g);
       const gone = [...was].filter((g) => !groups.includes(g));
@@ -148,7 +165,7 @@ window.Admin = (() => {
     const wk = dates.length ? U.dm(dates[0]) + "–" + U.dm(dates[dates.length - 1]) : "";
     /* «Новое расписание» на уже опубликованную неделю можно, если в файле другие группы (другое отделение) — добавляем */
     const adding = mode === "new" && same && !overlap.length;
-    if (!stop.length && mode === "new" && same && !adding) {
+    if (!stop.length && mode === "new" && same && !adding && ws.visible) {
       stop.push(`Расписание на неделю ${wk} уже опубликовано${overlap.length < groups.length ? ` (из этого файла уже есть ${overlap.length} групп из ${groups.length})` : ""}. Если это исправленный файл этой недели — опубликуйте его как изменение.`);
       switchTo = ["edit", "urgent"];
     }
@@ -169,7 +186,9 @@ window.Admin = (() => {
       diff = ws.visible && ws.visible !== same ? Pack.diff(Pack.unpack(ws.visible), mine) : vsLast;
       if (isChange(mode) && !vsLast.length && Pack.shortSame(same, sh)) stop.push("Этот файл ничем не отличается от последнего загруженного расписания недели " + wk + ". Публиковать нечего. Если нужно только отметить сокращённый день — поставьте галочку ниже.");
     }
-    return { groups, dates, week, stop, warn, same, switchTo, diff, short: sh.short, shortAdded, shortRemoved, merged, kept, adding, pending: ws.pending, pendingMerged };
+    const live = !!ws.visible;
+    const sched = !stop.length && !live && !!dates.length;
+    return { groups, dates, week, stop, warn, same, switchTo, diff, short: sh.short, shortAdded, shortRemoved, merged, kept, adding, pending: ws.pending, pendingMerged, live, sched };
   }
 
   /* ---------- экран ---------- */
@@ -214,6 +233,8 @@ window.Admin = (() => {
     const nowIso = U.now().toISOString();
     /* в списке по каждой неделе: что видят студенты сейчас и серым — что ждёт вечера; заменённые старые не показываем */
     const all = published ? published.file.editions : [];
+    /* неделя, которую студенты ещё совсем не видят */
+    const st0 = (e) => !weekState(published.file, e.week, nowIso).visible;
     const eds = [...new Set(all.map((e) => e.week))]
       .sort()
       .reverse()
@@ -224,7 +245,7 @@ window.Admin = (() => {
     U.openSheet(
       head("Учебная часть") +
         (note ? `<div class="card ${note.cls}"><p>${note.text}</p></div>` : "") +
-        `<p>Сохраните Excel недели в программе учебной части, как обычно, и выберите, что делаете.</p><input type="file" id="adm-file" accept=".xlsx" hidden><div class="modes"><button class="mode blue" id="adm-new" ${published ? "" : "disabled"}><b>Новое расписание</b><small>На новую неделю. Студенты увидят сразу</small></button><button class="mode" id="adm-edit" ${
+        `<p>Сохраните Excel недели в программе учебной части, как обычно, и выберите, что делаете.</p><input type="file" id="adm-file" accept=".xlsx" hidden><div class="modes"><button class="mode blue" id="adm-new" ${published ? "" : "disabled"}><b>Новое расписание</b><small>На новую неделю. Сразу или в назначенное время, например в субботу в ${NH}:00</small></button><button class="mode" id="adm-edit" ${
           published && eds.length ? "" : "disabled"
         }><b>Изменить расписание</b><small>Исправленный файл этой недели. Студенты увидят вечером ${AT}, тогда же уведомление</small></button><button class="mode urgent" id="adm-urgent" ${
           published && eds.length ? "" : "disabled"
@@ -236,8 +257,8 @@ window.Admin = (() => {
                   (e) =>
                     e.visibleFrom > nowIso
                       ? `<div class="ed pending"><div><b>${U.esc(edLabel(e))}</b><span class="ed-tag">Сейчас не видно студентам</span><small>${U.esc(e.source || "")}</small><small>Вступит в силу ${
-                          kemDay(new Date(e.visibleFrom)) === kemDay(U.now()) ? "сегодня " + AT : U.esc(U.whenText(e.visibleFrom))
-                        }, тогда же уведомление. Загружено ${U.esc(U.whenText(e.publishedAt))}</small></div><button class="btn danger" data-del="${U.esc(e.id)}">Убрать</button></div>`
+                          kemDay(new Date(e.visibleFrom)) === kemDay(U.now()) ? "сегодня в " + kemHM(new Date(e.visibleFrom)) : U.esc(U.whenText(e.visibleFrom))
+                        }, тогда же уведомление${st0(e) ? " «Новое расписание»" : ""}. Загружено ${U.esc(U.whenText(e.publishedAt))}</small></div><button class="btn danger" data-del="${U.esc(e.id)}">Убрать</button></div>`
                       : `<div class="ed"><div><b>${U.esc(edLabel(e))}</b><span class="ed-tag live">Сейчас у студентов</span><small>${U.esc(e.source || "")}</small><small>Видно студентам с ${U.esc(U.whenText(e.visibleFrom))}</small></div><button class="btn danger" data-del="${U.esc(e.id)}">Убрать</button></div>`,
                 )
                 .join("")
@@ -363,6 +384,7 @@ window.Admin = (() => {
       Reader.canonTeachers(data.lessons, known);
       draft = { data, name: f.name, mode, info: inspect(data, published && published.file, mode) };
       draft.short = draft.info.short;
+      draft.when = draft.info.sched ? defaultWhen(draft.info, U.now()) : null;
       showDraft();
     } catch (e) {
       draft = null;
@@ -383,18 +405,27 @@ window.Admin = (() => {
       .join(" · ")}</p></div>`;
   }
   const pendNote = (info) => (info.pending ? ` Изменения других групп, которые ждут ${NH}:00, сохранятся и вступят в силу ${AT}.` : "");
+  /* текст под выбором времени для недели, которую студенты ещё не видят */
+  function whenNote(info, n) {
+    const repl = info.pending ? ` Это заменит файл, загруженный ${U.esc(U.whenText(info.pending.publishedAt))}, который тоже ещё не видно студентам.` : "";
+    if (draft.whenBad) return "<b>Укажите день и время</b> или выберите «Сразу».";
+    const w = draft.when && new Date(draft.when);
+    if (w && w <= n) return "Это время уже прошло — студенты увидят <b>сразу</b>, через 1–2 минуты. Всем подписанным придёт уведомление «Новое расписание»." + repl;
+    if (w)
+      return `До <b>${U.esc(U.whenText(draft.when))}</b> студенты эту неделю не видят, а у вас в списке она будет <b>серым — «Сейчас не видно студентам»</b>. В это время расписание появится у студентов само (компьютер можно выключить), всем подписанным придёт уведомление «Новое расписание». До этого файл можно заменить исправленным или убрать.${repl}`;
+    return "Студенты увидят <b>сразу</b>, через 1–2 минуты. Всем подписанным придёт уведомление «Новое расписание»." + repl;
+  }
   function showDraft() {
     const box = U.$("adm-draft");
     if (!box || !draft) return;
     const { data, name, info, mode } = draft;
     const n = U.now();
-    const from = visibleFrom(mode, n);
     const teachers = new Set(data.lessons.map((l) => l.teacher).filter(Boolean)).size;
     let diffHtml = "";
     const dd = (d) => `${U.DAY_S[U.at(d).getDay()]} ${U.dm(d)}`;
     const shortLines = info.shortAdded.map((d) => `<li><b>${dd(d)} — сокращённый день</b>, пары по 1 часу</li>`).concat(info.shortRemoved.map((d) => `<li><b>${dd(d)} — обычный день</b> (сокращённый отменён)</li>`));
     if (info.diff && !info.stop.length && !info.diff.length && shortLines.length) diffHtml = `<details class="card" open><summary>Что изменилось по сравнению с опубликованным</summary><ul>${shortLines.join("")}</ul></details>`;
-    else if (info.adding && !info.stop.length) diffHtml = `<div class="card"><p>Неделя уже опубликована для других групп. Этот файл <b>добавится</b> к ней: ${info.groups.length} групп. Остальные ${info.kept.length} групп остаются как были.</p></div>`;
+    else if (info.adding && !info.stop.length) diffHtml = `<div class="card"><p>Неделя уже ${info.live ? "опубликована" : "загружена"} для других групп. Этот файл <b>добавится</b> к ней: ${info.groups.length} групп. Остальные ${info.kept.length} групп остаются как были.</p></div>`;
     else if (info.diff && !info.stop.length) {
       const d = info.diff;
       const line = (x) => {
@@ -404,11 +435,11 @@ window.Admin = (() => {
         return U.esc(h) + (x.type === "removed" ? `<b>снята</b> — <s>${U.esc(v(x.l))}</s>` : x.type === "new" ? `<b>новая</b> — ${U.esc(v(x.l))}` : `${U.esc(v(x.l))} <s>было: ${U.esc(v(x.old))}</s>`);
       };
       diffHtml = d.length
-        ? `<details class="card" open><summary>Что изменилось по сравнению с опубликованным: ${d.length}</summary><ul>${shortLines.join("")}${d
+        ? `<details class="card" open><summary>Что изменилось по сравнению с ${info.live ? "опубликованным" : "загруженным раньше"}: ${d.length}</summary><ul>${shortLines.join("")}${d
             .slice(0, 60)
             .map((x) => `<li>${line(x)}</li>`)
             .join("")}</ul>${d.length > 60 ? `<p class="hint">…и ещё ${d.length - 60}.</p>` : ""}</details>`
-        : '<div class="card"><p>Отличий от уже опубликованного расписания этой недели нет.</p></div>';
+        : `<div class="card"><p>Отличий от уже ${info.live ? "опубликованного" : "загруженного"} расписания этой недели нет.</p></div>`;
     } else if (!info.stop.length) diffHtml = '<div class="card"><p>Это новая неделя: раньше её не публиковали.</p></div>';
     box.innerHTML =
       `<p class="sub-h">${MODE[mode]}</p><div class="card ${info.stop.length ? "bad" : "ok"}"><h3>${U.esc(name)}</h3>${
@@ -430,7 +461,13 @@ window.Admin = (() => {
       diffHtml +
       (info.stop.length
         ? ""
-        : `<div class="card when"><p id="adm-when">${
+        : (info.sched
+            ? `<div class="card when"><h3>Когда показать студентам</h3><div class="choice"><label><input type="radio" name="adm-whenr" value="now" ${draft.when ? "" : "checked"}> <span>Сразу, через 1–2 минуты</span></label><label><input type="radio" name="adm-whenr" value="at" ${
+                draft.when ? "checked" : ""
+              }> <span>В назначенное время</span></label></div><div class="when-at" id="adm-at" ${draft.when ? "" : "hidden"}><input class="inp" type="date" id="adm-wd" aria-label="День публикации" min="${kemDay(n)}" max="${U.esc(info.dates[info.dates.length - 1])}" value="${
+                kemDay(new Date(draft.when || defaultWhen(info, n) || n))
+              }"><input class="inp" type="time" id="adm-wt" aria-label="Время публикации" value="${draft.when ? kemHM(new Date(draft.when)) : hh(NH)}"></div><p id="adm-when">${whenNote(info, n)}</p></div>`
+            : `<div class="card when"><p id="adm-when">${
             mode === "edit"
               ? beforeEvening(n)
                 ? `До ${NH}:00 студенты видят прежнее расписание, а это будет в списке <b>серым — «Сейчас не видно студентам»</b>. <b>Сегодня ${AT}</b> оно вступит в силу само (компьютер можно выключить): студенты увидят изменения, тем, у кого поменялись пары, придёт уведомление, прежнее уберётся из списка. Если нужно показать сразу — нажмите «Срочные изменения расписания».${
@@ -440,14 +477,17 @@ window.Admin = (() => {
               : mode === "urgent"
                 ? "Студенты увидят <b>сразу</b>, через 1–2 минуты. Тем, у кого поменялись пары, сразу придёт уведомление «Срочные изменения»." + pendNote(info)
                 : "Студенты увидят <b>сразу</b>, через 1–2 минуты. Всем подписанным придёт уведомление «Новое расписание»." + pendNote(info)
-          }</p></div>${
+          }</p></div>`) + `${
             info.warn.length ? '<div class="choice"><label><input type="checkbox" id="adm-sure"> <span>Я проверил замечания, файл правильный</span></label></div>' : ""
-          }<div class="actions"><button class="btn blue" id="adm-publish" ${info.warn.length ? "disabled" : ""}>${mode === "urgent" ? "Опубликовать срочно" : isChange(mode) ? "Опубликовать изменения" : "Опубликовать"}</button><button class="btn" id="adm-cancel">Отмена</button></div>`);
+          }<div class="actions"><button class="btn blue" id="adm-publish" ${info.warn.length ? "disabled" : ""}>${
+            info.sched ? "Опубликовать" : mode === "urgent" ? "Опубликовать срочно" : isChange(mode) ? "Опубликовать изменения" : "Опубликовать"
+          }</button><button class="btn" id="adm-cancel">Отмена</button></div>`);
     box.querySelectorAll("[data-switch]").forEach(
       (b) =>
         (b.onclick = () => {
           draft.mode = b.dataset.switch;
           draft.info = inspect(data, published && published.file, draft.mode, draft.short);
+          if (draft.info.sched && draft.when === null) draft.when = defaultWhen(draft.info, U.now());
           showDraft();
         }),
     );
@@ -461,6 +501,21 @@ window.Admin = (() => {
           showDraft();
         }),
     );
+    if (info.sched) {
+      const upd = () => {
+        const at = box.querySelector('[name="adm-whenr"][value="at"]').checked;
+        U.$("adm-at").hidden = !at;
+        const d = U.$("adm-wd").value, t = U.$("adm-wt").value;
+        draft.when = at && d && /^\d\d:\d\d$/.test(t) ? kemAt(d, t).toISOString() : null;
+        draft.whenBad = at && !draft.when;
+        U.$("adm-when").innerHTML = whenNote(draft.info, U.now());
+      };
+      box.querySelectorAll('[name="adm-whenr"]').forEach((r) => (r.onchange = upd));
+      U.$("adm-wd").onchange = upd;
+      U.$("adm-wt").onchange = upd;
+      U.$("adm-wd").oninput = upd;
+      U.$("adm-wt").oninput = upd;
+    }
     if (U.$("adm-sure")) U.$("adm-sure").onchange = () => (U.$("adm-publish").disabled = !U.$("adm-sure").checked);
     if (U.$("adm-cancel"))
       U.$("adm-cancel").onclick = () => {
@@ -476,7 +531,13 @@ window.Admin = (() => {
     btn.disabled = true;
     btn.textContent = "Публикую…";
     const n = U.now();
-    const from = visibleFrom(draft.mode, n);
+    if (draft.info.sched && draft.whenBad) {
+      btn.disabled = false;
+      btn.textContent = label0;
+      return U.toast("Укажите день и время публикации");
+    }
+    const sched = draft.info.sched;
+    const from = visibleFrom(draft.mode, n, draft);
     const ed = Pack.edition(draft.info.merged || draft.data, { id: n.getTime().toString(36), publishedAt: n.toISOString(), visibleFrom: from.toISOString(), kind: draft.mode, short: draft.short });
     /* ждущее вечера той же недели заменяется: при «Изменить» — новым файлом, при сразу видимом — пересобранным с этим файлом */
     const pend = draft.info.pending && draft.info.pendingMerged;
@@ -508,9 +569,17 @@ window.Admin = (() => {
         cls: "ok",
         text:
           `<b>Опубликовано: ${U.esc(label)}${m === "urgent" ? " (срочные изменения)" : m === "edit" ? " (изменение)" : ""}.</b> ` +
-          (from > n ? `Сейчас не видно студентам — вступит в силу сегодня ${AT} само, компьютер можно выключить.` : "У студентов появится через 1–2 минуты.") +
+          (sched
+            ? from > n
+              ? `Сейчас не видно студентам — появится ${U.esc(U.whenText(from.toISOString()))} само, компьютер можно выключить. Тогда же всем подписанным придёт уведомление «Новое расписание».`
+              : "У студентов появится через 1–2 минуты. Подписанным придёт уведомление о новом расписании."
+            : from > n
+              ? `Сейчас не видно студентам — вступит в силу сегодня ${AT} само, компьютер можно выключить.`
+              : "У студентов появится через 1–2 минуты.") +
           (sd.length ? ` Сокращённые дни (пары по 1 часу): ${U.esc(sd.join(", "))}.` : "") +
-          (m === "urgent"
+          (sched
+            ? ""
+            : m === "urgent"
             ? " Тем, у кого поменялись пары, сразу придёт уведомление, в приложении будет плашка «Изменения в расписании»."
             : m === "edit"
               ? from > n
