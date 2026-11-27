@@ -919,7 +919,21 @@
     } catch {}
   }
   hit();
-  document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && hit());
+  document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && (hit(), checkVer()));
+  /* вышла новая версия сайта: открытая страница перезагружается сама (если не открыто окно), иначе — подсказка */
+  let verAt = Date.now(), verTold = false;
+  async function checkVer() {
+    if (Date.now() - verAt < 5 * 60e3 || !C.v || C.v === "DEV") return;
+    verAt = Date.now();
+    try {
+      const t = await (await fetch("js/config.js?x=" + Date.now(), { cache: "no-store" })).text();
+      const v = (t.match(/v:\s*"(\d+)"/) || [])[1];
+      if (!v || v === C.v) return;
+      if ($("scrim").hidden) location.reload();
+      else if (!verTold) (verTold = true), toast("Сайт обновился — перезагрузите страницу, чтобы увидеть новое");
+    } catch {}
+  }
+  setInterval(() => document.visibilityState === "visible" && checkVer(), 10 * 60e3);
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(() => {});
   window.Rasp = { load, render, picker, admin, toast, help };
   Promise.all([load(true), window.raspSplash]).then(() => {

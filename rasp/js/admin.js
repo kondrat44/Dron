@@ -235,13 +235,29 @@ window.Admin = (() => {
     const all = published ? published.file.editions : [];
     /* неделя, которую студенты ещё совсем не видят */
     const st0 = (e) => !weekState(published.file, e.week, nowIso).visible;
+    /* в списке — все загруженные файлы, у каждого метка: зелёная «Сейчас у студентов» только у того, что студенты видят сейчас,
+       у остальных серая «Не видно студентам» с причиной (ждёт времени, заменён более новым, неделя прошла) */
+    const today = kemDay(U.now());
     const eds = [...new Set(all.map((e) => e.week))]
       .sort()
       .reverse()
       .flatMap((w) => {
         const st = weekState(published.file, w, nowIso);
-        return [...st.pendAll.slice().reverse(), st.visible].filter(Boolean);
+        const list = all.filter((e) => e.week === w).sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
+        const past = (list[0].dates[list[0].dates.length - 1] || addD(w, 5)) < today;
+        return list.map((e) => {
+          let state, why;
+          if (e.visibleFrom > nowIso) state = "wait";
+          else if (e === st.visible) (state = past ? "past" : "live"), (why = past ? "Неделя прошла — студенты её больше не видят" : "");
+          else {
+            const newer = list.filter((x) => x.visibleFrom <= nowIso && x.publishedAt > e.publishedAt).pop();
+            state = "old";
+            why = newer ? `Заменено файлом, который видно студентам с ${U.whenText(newer.visibleFrom)}` : "Заменено более новым файлом";
+          }
+          return { e, state, why };
+        });
       });
+    const liveN = eds.filter((x) => x.state === "live").length;
     U.openSheet(
       head("Учебная часть") +
         (note ? `<div class="card ${note.cls}"><p>${note.text}</p></div>` : "") +
@@ -250,12 +266,16 @@ window.Admin = (() => {
         }><b>Изменить расписание</b><small>Исправленный файл этой недели. Студенты увидят вечером ${AT}, тогда же уведомление</small></button><button class="mode urgent" id="adm-urgent" ${
           published && eds.length ? "" : "disabled"
         }><b>Срочные изменения расписания</b><small>Исправленный файл этой недели. Студенты увидят сразу</small></button></div><div id="adm-draft"></div>` +
-        `<details class="card" ${eds.length ? "open" : ""}><summary>Опубликовано сейчас: ${eds.length}</summary>${
+        `<details class="card" ${eds.length ? "open" : ""}><summary>Загружено файлов: ${eds.length}${eds.length ? ` · сейчас у студентов: ${liveN}` : ""}</summary>${
           eds.length
             ? eds
                 .map(
-                  (e) =>
-                    e.visibleFrom > nowIso
+                  ({ e, state, why }) =>
+                    state === "old" || state === "past"
+                      ? `<div class="ed pending"><div><b>${U.esc(edLabel(e))}</b><span class="ed-tag">Не видно студентам</span><small>${U.esc(e.source || "")}</small><small>${U.esc(why)}. Загружено ${U.esc(
+                          U.whenText(e.publishedAt),
+                        )}</small></div><button class="btn danger" data-del="${U.esc(e.id)}">Убрать</button></div>`
+                      : state === "wait"
                       ? `<div class="ed pending"><div><b>${U.esc(edLabel(e))}</b><span class="ed-tag">Сейчас не видно студентам</span><small>${U.esc(e.source || "")}</small><small>Вступит в силу ${
                           kemDay(new Date(e.visibleFrom)) === kemDay(U.now()) ? "сегодня в " + kemHM(new Date(e.visibleFrom)) : U.esc(U.whenText(e.visibleFrom))
                         }, тогда же уведомление${st0(e) ? " «Новое расписание»" : ""}. Загружено ${U.esc(U.whenText(e.publishedAt))}</small></div><button class="btn danger" data-del="${U.esc(e.id)}">Убрать</button></div>`
@@ -470,7 +490,7 @@ window.Admin = (() => {
             : `<div class="card when"><p id="adm-when">${
             mode === "edit"
               ? beforeEvening(n)
-                ? `До ${NH}:00 студенты видят прежнее расписание, а это будет в списке <b>серым — «Сейчас не видно студентам»</b>. <b>Сегодня ${AT}</b> оно вступит в силу само (компьютер можно выключить): студенты увидят изменения, тем, у кого поменялись пары, придёт уведомление, прежнее уберётся из списка. Если нужно показать сразу — нажмите «Срочные изменения расписания».${
+                ? `До ${NH}:00 студенты видят прежнее расписание, а это будет в списке <b>серым — «Сейчас не видно студентам»</b>. <b>Сегодня ${AT}</b> оно вступит в силу само (компьютер можно выключить): студенты увидят изменения, тем, у кого поменялись пары, придёт уведомление, прежнее станет в списке серым «Не видно студентам». Если нужно показать сразу — нажмите «Срочные изменения расписания».${
                     info.pending ? ` Это заменит изменения, загруженные ${U.esc(U.whenText(info.pending.publishedAt))}, которые ещё ждали ${NH}:00.` : ""
                   }`
                 : `Студенты увидят <b>сразу</b>, через 1–2 минуты. Уже позже ${NH}:00 — уведомление тем, у кого поменялись пары, придёт сразу.`
@@ -583,7 +603,7 @@ window.Admin = (() => {
             ? " Тем, у кого поменялись пары, сразу придёт уведомление, в приложении будет плашка «Изменения в расписании»."
             : m === "edit"
               ? from > n
-                ? ` ${AT} у студентов появится плашка «Изменения в расписании», тем, у кого поменялись пары, придёт уведомление, а прежнее уберётся из списка.`
+                ? ` ${AT} у студентов появится плашка «Изменения в расписании», тем, у кого поменялись пары, придёт уведомление, а прежнее станет в списке серым «Не видно студентам».`
                 : " В приложении будет плашка «Изменения в расписании». Уведомление тем, у кого поменялись пары, придёт сразу."
               : " Подписанным придёт уведомление о новом расписании."),
       });
